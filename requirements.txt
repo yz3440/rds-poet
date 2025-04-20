@@ -3,4 +3,5 @@ python_hackrf==1.2.7
 matplotlib
 numpy
 scipy
+pydub
 

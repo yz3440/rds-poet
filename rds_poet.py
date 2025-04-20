@@ -2,6 +2,7 @@
 """
 FM Transmitter with RDS encoding using HackRF One
 Transmits a message "RDS Test" over FM radio at 106.9 MHz
+Streams MP3 audio from assets folder
 """
 
 from python_hackrf import pyhackrf
@@ -10,21 +11,26 @@ import time
 import math
 import struct
 import sys
+import os
+from pydub import AudioSegment
+from pydub.utils import make_chunks
 
 # FM and RDS Parameters
 FM_FREQ = 106.9e6  # Broadcast frequency in Hz (106.9 MHz)
 SAMPLE_RATE = 2e6  # Sample rate
-TX_GAIN = 0  # Transmit gain (0-47)
-AUDIO_FREQ = 1000  # 1 kHz tone
+TX_GAIN = 20  # Transmit gain (0-47)
 FM_DEV = 75e3  # FM deviation for main carrier
 RDS_DEV = 2e3  # FM deviation for RDS subcarrier
 RDS_FREQ = 57e3  # RDS subcarrier frequency (57 kHz)
 
+# Audio file path
+AUDIO_FILE = os.path.join("assets", "never-gonna-give-you-up.mp3")
+
 # RDS Constants
 PI_CODE = 0x1234  # Program Identification code
-PTY = 0  # Program Type (0 = None)
-PS_NAME = "RDS Test"  # Program Service name (max 8 chars)
-RT_MESSAGE = "RDS Test"  # Radio Text (max 64 chars)
+PTY = 10  # Program Type (10 = Pop Music)
+PS_NAME = "RICKROLL"  # Program Service name (max 8 chars)
+RT_MESSAGE = "Rick Astley - Never Gonna Give You Up"  # Radio Text (max 64 chars)
 
 
 class RDSEncoder:
@@ -173,21 +179,46 @@ class RDSEncoder:
         return biphase_bits
 
 
+def load_audio_samples():
+    """Load MP3 audio file and convert to the required sample rate"""
+    print(f"Loading audio file: {AUDIO_FILE}")
+
+    # Load MP3 file
+    audio = AudioSegment.from_mp3(AUDIO_FILE)
+
+    # Convert to mono if stereo
+    if audio.channels > 1:
+        audio = audio.set_channels(1)
+
+    # Resample to match our sample rate
+    target_sample_rate = int(SAMPLE_RATE / 10)  # Downsample for processing
+    audio = audio.set_frame_rate(target_sample_rate)
+
+    # Normalize audio
+    audio = audio.normalize()
+
+    # Extract samples as numpy array
+    samples = np.array(audio.get_array_of_samples()).astype(np.float32)
+    samples /= np.max(np.abs(samples))  # Normalize to range [-1, 1]
+
+    print(f"Audio loaded: {len(samples)} samples at {target_sample_rate} Hz")
+    return samples, target_sample_rate
+
+
 def generate_samples(duration, sample_rate):
     """Generate samples for the specified duration"""
+    # Load audio samples
+    audio_samples, audio_sample_rate = load_audio_samples()
+
+    # Calculate resampling ratio
+    resample_ratio = sample_rate / audio_sample_rate
+
+    # Create buffer for the final samples
     num_samples = int(duration * sample_rate)
     samples = np.zeros(num_samples, dtype=np.complex64)
 
-    # Generate 1 kHz audio tone
-    audio_phase = 0
-    audio_samples = np.zeros(num_samples)
-    for i in range(num_samples):
-        t = i / sample_rate
-        audio_samples[i] = 0.5 * np.sin(2 * np.pi * AUDIO_FREQ * t)
-
     # Create RDS encoder and generate bit stream
     rds_encoder = RDSEncoder(PI_CODE, PS_NAME, RT_MESSAGE, PTY)
-    rds_phase = 0
     rds_bit_phase = 0
 
     # RDS bit rate is 1187.5 bits per second
@@ -198,8 +229,26 @@ def generate_samples(duration, sample_rate):
     # FM modulation (carrier + audio + RDS)
     fm_phase = 0
 
+    # Pre-emphasis filter coefficients (50 µs time constant)
+    alpha = 1 - np.exp(-1 / (50e-6 * sample_rate))
+
+    # Create a pre-emphasized copy of the audio
+    audio_filtered = np.zeros(len(audio_samples))
+    prev_sample = 0
+    for i in range(len(audio_samples)):
+        audio_filtered[i] = alpha * (audio_samples[i] - prev_sample) + prev_sample
+        prev_sample = audio_filtered[i]
+
+    # Scale audio appropriately
+    audio_filtered *= 0.5  # Adjust volume
+
+    # Loop over samples to generate FM signal
     for i in range(num_samples):
         t = i / sample_rate
+
+        # Get audio sample (with looping)
+        audio_pos = int((i / sample_rate) * audio_sample_rate) % len(audio_filtered)
+        audio_value = audio_filtered[audio_pos]
 
         # Generate new RDS bit if needed
         if rds_bit_phase >= rds_bit_period:
@@ -210,10 +259,13 @@ def generate_samples(duration, sample_rate):
         rds_bit_phase += 1
 
         # RDS subcarrier is a 57 kHz signal
-        rds_subcarrier = current_bit * np.sin(2 * np.pi * RDS_FREQ * t + rds_phase)
+        rds_subcarrier = current_bit * np.sin(2 * np.pi * RDS_FREQ * t)
+
+        # Pilot tone at 19 kHz (needed for stereo receivers)
+        pilot_tone = 0.1 * np.sin(2 * np.pi * 19e3 * t)
 
         # Combine audio and RDS
-        modulation = audio_samples[i] + 0.1 * rds_subcarrier
+        modulation = audio_value + 0.1 * rds_subcarrier + pilot_tone
 
         # Apply FM modulation
         fm_phase += 2 * np.pi * (FM_DEV * modulation) / sample_rate
@@ -248,9 +300,14 @@ def tx_callback(device, buffer, buffer_length, valid_length):
 
 
 def main():
-    print("Starting FM RDS Transmitter...")
+    print("Starting FM RDS Transmitter with MP3 Audio...")
     print(f"Frequency: {FM_FREQ/1e6} MHz")
     print(f"RDS Message: {PS_NAME} / {RT_MESSAGE}")
+
+    # Check if audio file exists
+    if not os.path.exists(AUDIO_FILE):
+        print(f"Error: Audio file {AUDIO_FILE} not found!")
+        return
 
     # Initialize HackRF
     pyhackrf.pyhackrf_init()
@@ -274,14 +331,16 @@ def main():
         # Set up callback
         global tx_buffer, tx_idx, tx_buffer_size
 
-        # Generate 5 seconds of samples
-        duration = 5.0
+        # Generate samples with MP3 audio
+        duration = 15.0  # Generate 15 seconds initially (will loop)
+        print("Generating samples with MP3 audio...")
         tx_buffer = generate_samples(duration, SAMPLE_RATE)
         tx_buffer_size = len(tx_buffer)
         tx_idx = 0
 
         # Start transmission
         sdr.set_tx_callback(tx_callback)
+        print("Starting transmission...")
         sdr.pyhackrf_start_tx()
 
         print("Transmitting... Press Ctrl+C to stop")
