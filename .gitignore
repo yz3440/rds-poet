@@ -1,3 +1,8 @@
+# FM Intermediate Files
+assets/*.bin
+assets/*.wav
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
