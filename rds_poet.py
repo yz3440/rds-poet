@@ -222,7 +222,7 @@ def generate_samples(duration, sample_rate):
     return samples
 
 
-def tx_callback(device, buffer, buffer_length):
+def tx_callback(device, buffer, buffer_length, valid_length):
     """Callback function for HackRF transmission"""
     global tx_buffer, tx_idx, tx_buffer_size
 
