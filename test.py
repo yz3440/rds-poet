@@ -77,6 +77,7 @@ for i in range(num_rows):
     spectrogram[i, :] = 10 * np.log10(
         np.abs(np.fft.fftshift(np.fft.fft(samples[i * fft_size : (i + 1) * fft_size])))
         ** 2
+        + 1e-10  # Add small constant to prevent log of zero
     )
 extent = [
     (center_freq + sample_rate / -2) / 1e6,
