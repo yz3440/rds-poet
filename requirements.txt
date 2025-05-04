@@ -1,5 +1,5 @@
 pysdr
-python_hackrf==1.2.7
+python_hackrf
 matplotlib
 numpy
 scipy
