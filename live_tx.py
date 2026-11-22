@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+"""Headless HackRF FM transmitter with line-by-line song title updates."""
+
+import argparse
+import math
+import signal
+import subprocess
+import sys
+
+from gnuradio import analog, blocks, filter, gr
+from gnuradio.filter import firdes
+
+from live_rds import LiveRds, validate_title
+
+
+MPX_RATE = 228_000
+INTERPOLATION = 36
+IQ_RATE = MPX_RATE * INTERPOLATION
+DEVIATION = 75_000
+
+
+class Transmitter(gr.top_block):
+    def __init__(self, sink, title, wav=None):
+        super().__init__("Live RadioText")
+        self.rds = LiveRds(title)
+        # Two chips per bit. The filter interpolates 2375 chips/s to 228 kS/s.
+        pulse = filter.interp_fir_filter_fff(
+            96, firdes.root_raised_cosine(96, MPX_RATE, 2375, 1, 961)
+        )
+        carrier = analog.sig_source_f(MPX_RATE, analog.GR_SIN_WAVE, 57000, 0.035)
+        pilot = analog.sig_source_f(MPX_RATE, analog.GR_SIN_WAVE, 19000, 0.09)
+        rds_band = blocks.multiply_ff()
+        multiplex = blocks.add_ff()
+        self.connect(self.rds, pulse, (rds_band, 0))
+        self.connect(carrier, (rds_band, 1))
+        self.connect(rds_band, (multiplex, 0))
+        self.connect(pilot, (multiplex, 1))
+
+        if wav:
+            source = blocks.wavfile_source(str(wav), True)
+            channels = source.channels()
+            if channels not in (1, 2):
+                raise ValueError("Use a mono or stereo WAV file")
+            audio = source
+            if channels == 2:
+                mix = blocks.add_ff()
+                audio = blocks.multiply_const_ff(0.5)
+                self.connect((source, 0), (mix, 0))
+                self.connect((source, 1), (mix, 1))
+                self.connect(mix, audio)
+            rate = source.sample_rate()
+            if rate != 48_000:
+                divisor = math.gcd(rate, 48_000)
+                resampler = filter.rational_resampler_fff(
+                    interpolation=48_000 // divisor, decimation=rate // divisor
+                )
+                self.connect(audio, resampler)
+                audio = resampler
+            self.connect(audio, analog.fm_preemph(48000, 75e-6),
+                         analog.rail_ff(-1, 1),
+                         filter.fir_filter_fff(1, firdes.low_pass(0.55, 48000, 14500, 1500)),
+                         filter.rational_resampler_fff(interpolation=19, decimation=4),
+                         (multiplex, 2))
+        else:
+            tone = analog.sig_source_f(MPX_RATE, analog.GR_SIN_WAVE, 440, 0.12)
+            self.connect(tone, (multiplex, 2))
+
+        self.connect(multiplex, analog.frequency_modulator_fc(2 * math.pi * DEVIATION / MPX_RATE),
+                     blocks.multiply_const_cc(0.85),
+                     filter.rational_resampler_ccc(interpolation=INTERPOLATION, decimation=1), sink)
+
+
+def hackrf_sink(freq_hz):
+    # Some gr-osmosdr builds crash if libusb cannot initialize.
+    check = subprocess.run(["hackrf_info"], capture_output=True, text=True)
+    if check.returncode:
+        raise RuntimeError((check.stderr or check.stdout).strip() or "hackrf_info failed")
+
+    import osmosdr
+
+    sink = osmosdr.sink(args="numchan=1 hackrf=0")
+    if "IF" not in sink.get_gain_names(0):
+        raise RuntimeError("HackRF TX gain control unavailable. Check hackrf_info.")
+    sink.set_sample_rate(IQ_RATE)
+    sink.set_center_freq(freq_hz, 0)
+    if abs(sink.get_sample_rate() - IQ_RATE) > 1 or abs(sink.get_center_freq(0) - freq_hz) > 1:
+        raise RuntimeError("HackRF did not accept the requested sample rate and frequency")
+    sink.set_gain(0, "RF", 0)
+    sink.set_gain(8, "IF", 0)
+    sink.set_bandwidth(1.75e6, 0)
+    return sink
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--freq-mhz", type=float, default=87.5)
+    parser.add_argument("--title", type=validate_title, default="RDS Poet")
+    parser.add_argument("--wav", help="loop a mono or stereo WAV (default: 440 Hz tone)")
+    args = parser.parse_args()
+    if not math.isfinite(args.freq_mhz) or not 1 <= args.freq_mhz <= 6000:
+        parser.error("Use a HackRF frequency between 1 and 6000 MHz")
+    try:
+        graph = Transmitter(hackrf_sink(args.freq_mhz * 1e6), args.title, args.wav)
+        graph.start()
+    except (RuntimeError, ValueError, OSError) as exc:
+        parser.exit(1, f"Could not start transmitter: {exc}\n")
+
+    def stop(signum, frame):
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, stop)
+    try:
+        print(f"Running at {args.freq_mhz:g} MHz. Type a title and press Enter. Ctrl+C stops.", flush=True)
+        for line in sys.stdin:
+            title = line.rstrip("\r\n")
+            try:
+                graph.rds.set_title(title)
+                print(f"Queued RadioText: {title}", flush=True)
+            except ValueError as exc:
+                print(exc, file=sys.stderr)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        graph.stop()
+        graph.wait()
+
+
+if __name__ == "__main__":
+    main()
