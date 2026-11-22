@@ -21,6 +21,18 @@ title changes. It needs GNU Radio 3.10, NumPy, gr-osmosdr with HackRF support
 and the `hackrf_info` utility. It uses an 8.208 MS/s IQ stream, with the RF
 amplifier off and 8 dB TX VGA gain.
 
+### If the iPod nano is silent
+
+On the fifth-generation nano, plug wired headphones into the headphone jack,
+open Radio and check a familiar FM station first. The headphone cord is the
+FM antenna and radio audio plays through the headphones. Then manually tune
+87.5 MHz. [Apple's fifth-generation nano guide, chapter 6](https://cdsassets.apple.com/live/6GJYWVAV/user/ma1194_ipod_nano_5th_gen_userguide.pdf)
+
+Stop the WAV run with Ctrl+C and use the command above without `--wav` to
+send a continuous 440 Hz tone. Listen for the tone and check for `RDS POET`.
+A queued title in the terminal only confirms that the transmitter accepted
+the input. The iPod display and audio are the checks for actual reception.
+
 ## Earlier gr-rds transmitter and encoder probe
 
 Song titles belong in RDS RadioText (group 2A). The Program Service name
