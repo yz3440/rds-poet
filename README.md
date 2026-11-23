@@ -24,6 +24,22 @@ comparison, add `--tx-gain-db 14` and keep the iPod and headphone cord in
 the same position. The startup line reports the configured gain.
 [HackRF TX gain controls](https://hackrf.readthedocs.io/en/latest/setting_gain.html)
 
+### Play the local MP3 with less receiver hiss
+
+Loop the bundled song with two-second RadioText rotation:
+
+```sh
+/usr/bin/python3 live_tx.py --freq-mhz 87.5 --tx-gain-db 40 --mono \
+  --audio-file assets/never-gonna-give-you-up.mp3 \
+  --lyrics assets/rotation-demo.txt --line-seconds 2
+```
+
+`--mono` omits the 19 kHz stereo pilot while carrying the music and 57 kHz
+RDS subcarrier. This can reduce hiss from a receiver's stereo decoder.
+Compare with and without `--mono` at the same gain and distance. This
+checkout's installed libsndfile reads the MP3 directly. `--wav` remains
+an alias for `--audio-file`.
+
 ### Rotate lyrics
 
 To loop the three original sample lines at two seconds per line, run

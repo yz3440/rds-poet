@@ -23,7 +23,7 @@ DEVIATION = 75_000
 
 
 class Transmitter(gr.top_block):
-    def __init__(self, sink, title, wav=None):
+    def __init__(self, sink, title, wav=None, *, mono=False):
         super().__init__("Live RadioText")
         self.rds = LiveRds(title)
         # Two chips per bit. The filter interpolates 2375 chips/s to 228 kS/s.
@@ -31,19 +31,20 @@ class Transmitter(gr.top_block):
             96, firdes.root_raised_cosine(96, MPX_RATE, 2375, 1, 961)
         )
         carrier = analog.sig_source_f(MPX_RATE, analog.GR_SIN_WAVE, 57000, 0.035)
-        pilot = analog.sig_source_f(MPX_RATE, analog.GR_SIN_WAVE, 19000, 0.09)
         rds_band = blocks.multiply_ff()
         multiplex = blocks.add_ff()
         self.connect(self.rds, pulse, (rds_band, 0))
         self.connect(carrier, (rds_band, 1))
         self.connect(rds_band, (multiplex, 0))
-        self.connect(pilot, (multiplex, 1))
+        if not mono:
+            pilot = analog.sig_source_f(MPX_RATE, analog.GR_SIN_WAVE, 19000, 0.09)
+            self.connect(pilot, (multiplex, 2))
 
         if wav:
             source = blocks.wavfile_source(str(wav), True)
             channels = source.channels()
             if channels not in (1, 2):
-                raise ValueError("Use a mono or stereo WAV file")
+                raise ValueError("Use a mono or stereo audio file")
             audio = source
             if channels == 2:
                 mix = blocks.add_ff()
@@ -63,10 +64,10 @@ class Transmitter(gr.top_block):
                          analog.rail_ff(-1, 1),
                          filter.fir_filter_fff(1, firdes.low_pass(0.55, 48000, 14500, 1500)),
                          filter.rational_resampler_fff(interpolation=19, decimation=4),
-                         (multiplex, 2))
+                         (multiplex, 1))
         else:
             tone = analog.sig_source_f(MPX_RATE, analog.GR_SIN_WAVE, 440, 0.12)
-            self.connect(tone, (multiplex, 2))
+            self.connect(tone, (multiplex, 1))
 
         self.connect(multiplex, analog.frequency_modulator_fc(2 * math.pi * DEVIATION / MPX_RATE),
                      blocks.multiply_const_cc(0.85),
@@ -119,7 +120,10 @@ def main():
                              help="rotate RadioText through a file, one line at a time")
     parser.add_argument("--line-seconds", type=float, metavar="SECONDS",
                         help="time per line with --lyrics (default: 2)")
-    parser.add_argument("--wav", help="loop a mono or stereo WAV (default: 440 Hz tone)")
+    parser.add_argument("--audio-file", "--wav", metavar="FILE",
+                        help="loop a local audio file supported by libsndfile (default: 440 Hz tone)")
+    parser.add_argument("--mono", action="store_true",
+                        help="omit the 19 kHz stereo pilot for mono FM reception with RDS")
     parser.add_argument("--tx-gain-db", type=int, default=8, metavar="DB",
                         help="HackRF TX VGA gain, 0 to 47 dB (default: 8)")
     args = parser.parse_args()
@@ -139,7 +143,8 @@ def main():
         parser.error(str(exc))
     initial_title = lines[0] if lines else args.title
     try:
-        graph = Transmitter(hackrf_sink(args.freq_mhz * 1e6, args.tx_gain_db), initial_title, args.wav)
+        sink = hackrf_sink(args.freq_mhz * 1e6, args.tx_gain_db)
+        graph = Transmitter(sink, initial_title, args.audio_file, mono=args.mono)
         graph.start()
     except (RuntimeError, ValueError, OSError) as exc:
         parser.exit(1, f"Could not start transmitter: {exc}\n")
