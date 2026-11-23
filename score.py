@@ -13,11 +13,14 @@ from radio.live_rds import validate_title
 RATE = 48_000
 TOKEN = r"(?:[a-g]#?[2-6]|~)"
 PATTERN = rf'note\("({TOKEN}(?: {TOKEN}){{0,15}})"\)\.s\("(sine|triangle)"\)'
+# Literal double quotes in a constrained string can make Ollama emit invalid JSON.
+# Request valid single-quoted Strudel, then use the saved score's double-quote style.
+MODEL_PATTERN = PATTERN.replace('"', "'")
 SCHEMA = {
     "type": "object",
     "properties": {
         "line": {"type": "string", "minLength": 1, "maxLength": 64},
-        "strudel": {"type": "string", "pattern": "^" + PATTERN + "$"},
+        "strudel": {"type": "string", "pattern": "^" + MODEL_PATTERN + "$"},
     },
     "required": ["line", "strudel"],
     "additionalProperties": False,
@@ -26,7 +29,7 @@ INSTRUCTIONS = """Compose one line of an ongoing radio poem and its musical answ
 Write a short concrete image (2 to 8 words), in printable ASCII. Listen to the
 provided cue. Carry one detail forward from the recent lines, changing what it
 means. Avoid repeating lines. Return a JSON object with line and strudel.
-Compose Strudel like note("d3 ~ a3 c4").s("triangle"). Each space divides the
+Compose Strudel like note('d3 ~ a3 c4').s('triangle'). Each space divides the
 cycle into equal steps. Use 1-16 tokens: lowercase notes a-g in octaves 2-6,
 optional sharp, and ~ for a rest. Use sine or triangle. Include a sounding
 note. Change rhythm, register or timbre in response to the poem and sound."""
@@ -89,4 +92,9 @@ def generate(model, theme, cue, history):
         message = json.load(response)
     if "error" in message:
         raise ValueError(message["error"])
-    return json.loads(message["message"]["content"])
+    reply = json.loads(message["message"]["content"])
+    code = reply["strudel"]
+    if not isinstance(code, str) or not re.fullmatch(MODEL_PATTERN, code):
+        raise ValueError("Model returned an invalid Strudel expression")
+    reply["strudel"] = code.replace("'", '"')
+    return reply

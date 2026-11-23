@@ -1,4 +1,5 @@
 import io
+import json
 import sys
 import unittest
 from contextlib import redirect_stderr
@@ -9,10 +10,24 @@ from unittest.mock import patch
 import numpy as np
 
 import perform
+import score
 from score import Phrase
 
 
 class PerformanceTest(unittest.TestCase):
+    def test_ollama_strudel_survives_json_and_score_rendering(self):
+        code = "note('c4 ~ g4').s('triangle')"
+        line = "A bird's shadow weighs the air."
+        content = json.dumps({"line": line, "strudel": code})
+        stream = io.BytesIO(json.dumps({"message": {"content": content}}).encode())
+        with patch.object(score, "urlopen", return_value=stream) as post:
+            reply = score.generate("qwen2.5:1.5b", "weight", "bright", [])
+        schema = json.loads(post.call_args.args[0].data)["format"]
+        self.assertRegex(code, schema["properties"]["strudel"]["pattern"])
+        phrase = score.render(reply, 0.25)
+        self.assertEqual(phrase.line, line)
+        self.assertEqual(phrase.strudel, 'note("c4 ~ g4").s("triangle")')
+
     def test_fm_cli_converts_mhz_before_opening_device(self):
         score = Path(perform.__file__).parent / "examples" / "rehearsal.jsonl"
         argv = ["perform.py", "--score", str(score), "--fm", "87.5", "--tx-gain-db", "40"]

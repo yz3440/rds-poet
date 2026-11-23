@@ -32,3 +32,5 @@ To play that take on the iPod, use the existing transmitter with the generated s
 ```sh
 /usr/bin/python3 perform.py --score build/featherweight-live/score.jsonl --fm 87.5 --tx-gain-db 40
 ```
+
+The [four-line Qwen take](qwen-take.jsonl) was generated on this ThinkPad from the archived MDR JUMP cue. Across three completed takes with the model already loaded on CPU, the median time for an accepted line and its notes was 4.0 seconds. The slowest took 9.6 seconds. The saved take took 15.6 seconds to compose and plays for 40 seconds. To hear this exact result on speakers, run `/usr/bin/python3 perform.py --score examples/featherweight/qwen-take.jsonl --bars 4` from the repository root.

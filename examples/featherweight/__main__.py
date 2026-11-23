@@ -17,26 +17,27 @@ from score import PATTERN, RATE, generate, render
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_MODEL = "qwen2.5:1.5b"
-CYCLES = 4
 ARCHIVE_CUE = (
     'Published redsea RDS example, group 2A, MDR JUMP. '
     'Track title: Das Leichteste der Welt (the lightest thing in the world).'
 )
-THEME = (
-    "Write a four-line sequence called Featherweight. Start with a physical "
-    "object suggested by the radio cue. Make it change slightly with each line. "
-    "Use original English words. Do not quote song lyrics. Give the final line a landing."
+LINE_PROMPTS = (
+    "Name a small everyday object that the radio cue brings to mind. Put it somewhere specific.",
+    "Begin with 'Under'. Show something moving beside the object from line one.",
+    "Begin with a sound such as 'Tick' or 'Hush'. Name the second object that makes it.",
+    "Begin with 'Only'. End on a visible trace left by the movement or sound.",
 )
 
 
 def compose(model, cue):
     history = []
     phrases = []
-    for index in range(CYCLES):
+    for index, instruction in enumerate(LINE_PROMPTS):
+        theme = f"English poem, line {index + 1} of four. {instruction} Use your own words."
         start = monotonic()
         for attempt in range(3):
             try:
-                reply = generate(model, f"{THEME} This is line {index + 1} of {CYCLES}.", cue, history)
+                reply = generate(model, theme, cue, history)
                 phrase = render(reply, DEFAULT_LINE_SECONDS)
                 if phrase.line in history:
                     raise ValueError("repeated line")

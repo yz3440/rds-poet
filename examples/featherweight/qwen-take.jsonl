@@ -1,0 +1,4 @@
+{"line": "The dandelion", "strudel": "note(\"f4 ~ e5 d5 c5 ~ b4 a4 ~ g4 f4 e4 ~ d4 c4 ~\").s(\"sine\")"}
+{"line": "Under the dandelion, a butterfly flutters.", "strudel": "note(\"g4 ~ e4 c5 e5 ~ g5 a5 c6 ~ g6 ~ a6 c6 ~ g6\").s(\"triangle\")"}
+{"line": "Tick dandelion", "strudel": "note(\"c4 ~ d4 ~ e4 f4 ~ g4 ~ a4 b4 ~ c5 ~ a5 ~\").s(\"triangle\")"}
+{"line": "Only the butterfly flutters in the dandelion's wake.", "strudel": "note(\"a4 ~ c5 d5 e5 f5 g5 a5\").s(\"triangle\")"}
