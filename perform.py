@@ -18,16 +18,16 @@ from gnuradio import audio, blocks, gr
 
 from radio.live_rds import DEFAULT_LINE_SECONDS
 from radio.live_tx import DEFAULT_FM_MHZ, Transmitter, hackrf_sink
-from score import RATE, generate, render
+from score import Composer, RATE, render
 
 
 class Player(gr.sync_block):
     """Advance both the line and the sound on audio cycle boundaries."""
 
-    def __init__(self, first, queue, display, bars=None):
+    def __init__(self, first, next_phrase, display, bars=None):
         super().__init__("Poetry score", in_sig=None, out_sig=[np.float32])
         self.current = first
-        self.queue = queue
+        self.next_phrase = next_phrase
         self.display = display
         self.position = 0
         self.started = False
@@ -45,7 +45,9 @@ class Player(gr.sync_block):
                 self.display(self.current)
             else:
                 try:
-                    self.current = self.queue.get_nowait()
+                    self.current = self.next_phrase()
+                except StopIteration:
+                    return -1
                 except Empty:
                     pass  # Continue the current cycle during a slow model response.
                 else:
@@ -58,46 +60,28 @@ class Player(gr.sync_block):
 
 
 def run(args, cue):
-    history = []
-    pocket = None
-    if args.model == "pocket" and not args.score:
-        from pocket import PocketPoet
-        pocket = PocketPoet()
-        print("Loaded the local corpus-trained neural model.", file=sys.stderr)
+    stopped = threading.Event()
+    request_phrase = threading.Event()
+    failure = []
     if args.score:
         with args.score.open(encoding="utf-8") as file:
             phrases = [render(json.loads(line), args.line_seconds) for line in file if line.strip()]
         if not phrases:
             raise ValueError("Score is empty")
-        sequence = cycle(phrases)
+        sequence = cycle(phrases) if args.loop_score else iter(phrases)
+        next_phrase = sequence.__next__
+        first = next_phrase()
+    else:
+        composer = Composer(args.model)
+        upcoming = Queue(maxsize=1)
+        next_phrase = upcoming.get_nowait
 
-    def compose():
-        if args.score:
-            return next(sequence)
-        inspiration = cue()
-        print(f"Composing from: {inspiration}", file=sys.stderr, flush=True)
-        for attempt in range(3):
-            try:
-                if pocket is None:
-                    reply = generate(args.model, args.theme, inspiration, history)
-                else:
-                    reply = pocket.reply(args.theme, inspiration, history)
-                phrase = render(reply, args.line_seconds)
-                if phrase.line in history:
-                    raise ValueError("Repeated recent line")
-                break
-            except (ValueError, KeyError, TypeError) as exc:
-                if attempt == 2:
-                    raise ValueError(f"No playable phrase after three replies: {exc}") from exc
-        history.append(phrase.line)
-        del history[:-6]
-        return phrase
+        def compose():
+            inspiration = cue()
+            print(f"Composing from: {inspiration}", file=sys.stderr, flush=True)
+            return composer.compose(args.theme, inspiration, args.line_seconds)
 
-    first = compose()
-    upcoming = Queue(maxsize=1)
-    stopped = threading.Event()
-    request_phrase = threading.Event()
-    failure = []
+        first = compose()
 
     def produce():
         while not stopped.is_set():
@@ -118,9 +102,10 @@ def run(args, cue):
         if args.fm:
             graph.rds.set_title(phrase.line)
         print(f"{phrase.line}\n  {phrase.strudel}", flush=True)
-        request_phrase.set()
+        if not args.score and player.bars != 0:
+            request_phrase.set()
 
-    player = Player(first, upcoming, display, args.bars)
+    player = Player(first, next_phrase, display, args.bars)
     if args.fm:
         graph = Transmitter(hackrf_sink(args.fm * 1e6, args.tx_gain_db), first.line,
                             mono=True, audio_source=player)
@@ -136,7 +121,6 @@ def run(args, cue):
             output = player
         graph.connect(output, sink)
 
-    worker = threading.Thread(target=produce, name="composer", daemon=True)
     print(f"setcps({1 / args.line_seconds:.6g})", flush=True)
     graph.start()
 
@@ -149,7 +133,8 @@ def run(args, cue):
     waiter = threading.Thread(target=wait_graph, name="playback", daemon=True)
     waiter.start()
     try:
-        worker.start()
+        if not args.score:
+            threading.Thread(target=produce, name="composer", daemon=True).start()
         stopped.wait()
     finally:
         stopped.set()
@@ -166,9 +151,11 @@ def main():
     parser.add_argument("--model", default="qwen2.5:1.5b", help="local Ollama model name, or pocket for the built-in neural model")
     parser.add_argument("--theme", default="What can be heard through a closed door?")
     source = parser.add_mutually_exclusive_group()
-    source.add_argument("--sample-mhz", type=float, help="sample FM with HackRF once before playback")
+    source.add_argument("--sample-mhz", type=float, nargs="+", metavar="MHZ",
+                        help="rotate through FM stations on HackRF (capture all before FM transmission)")
     source.add_argument("--rtl-mhz", type=float, help="refresh FM cues continuously using an RTL-SDR")
-    parser.add_argument("--score", type=Path, help="rehearse a JSONL score instead of running the model")
+    parser.add_argument("--score", type=Path, help="play a saved JSONL score once")
+    parser.add_argument("--loop-score", action="store_true", help="repeat the saved score")
     output = parser.add_mutually_exclusive_group()
     output.add_argument("--fm", nargs="?", const=DEFAULT_FM_MHZ, type=float, metavar="MHZ",
                         help="transmit music and RDS using HackRF (default with --fm: %(const)s MHz)")
@@ -180,13 +167,15 @@ def main():
     args = parser.parse_args()
     if not math.isfinite(args.line_seconds) or not 0.25 <= args.line_seconds <= 60:
         parser.error("choose a cycle duration between 0.25 and 60 seconds")
-    for frequency in (args.fm, args.sample_mhz, args.rtl_mhz):
+    for frequency in (args.fm, args.rtl_mhz, *(args.sample_mhz or [])):
         if frequency is not None and not 87.5 <= frequency <= 108:
             parser.error("choose an FM broadcast frequency between 87.5 and 108 MHz")
     if args.bars is not None and (args.bars < 1 or args.fm):
         parser.error("--bars requires a positive count and a speaker or WAV preview")
     if args.score and (args.rtl_mhz or args.sample_mhz):
         parser.error("air cues require model generation")
+    if args.loop_score and not args.score:
+        parser.error("--loop-score requires --score")
     if not 0 <= args.tx_gain_db <= 47:
         parser.error("TX gain must be between 0 and 47 dB")
     signal.signal(signal.SIGTERM, signal.default_int_handler)
@@ -195,12 +184,11 @@ def main():
             if args.rtl_mhz:
                 from radio.listen import rtl_cues
                 cue = stack.enter_context(rtl_cues(args.rtl_mhz))
+            elif args.sample_mhz:
+                from radio.listen import station_cues
+                cue = station_cues(args.sample_mhz, before_tx=args.fm is not None)
             else:
-                initial = "Room tone imagined from the theme"
-                if args.sample_mhz:
-                    from radio.listen import capture_hackrf
-                    initial = capture_hackrf(args.sample_mhz)
-                cue = lambda: initial
+                cue = lambda: "Room tone imagined from the theme"
             run(args, cue)
     except KeyboardInterrupt:
         return

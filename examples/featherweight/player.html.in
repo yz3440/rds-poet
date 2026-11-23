@@ -34,7 +34,7 @@
   const preview = new Audio("preview.wav");
   const duration = take.bars.length * take.seconds;
   let clock, frame, endTimer, session = 0, usingStrudel = false;
-  el("cue").textContent = take.cue;
+  el("cue").textContent = take.bars[0].cue;
   el("credit").textContent = take.credit;
   el("line").textContent = take.bars[0].line;
 
@@ -51,8 +51,9 @@
   function show() {
     const seconds = clock();
     const index = Math.min(take.bars.length - 1, Math.floor(seconds / take.seconds));
-    const line = take.bars[index].line;
+    const {line, cue} = take.bars[index];
     if (el("line").textContent !== line) el("line").textContent = line;
+    if (el("cue").textContent !== cue) el("cue").textContent = cue;
     if (seconds >= duration || (!usingStrudel && preview.ended)) stop();
     else frame = requestAnimationFrame(show);
   }
@@ -67,7 +68,7 @@
         const context = window.getAudioContext();
         await context.resume();
         if (token !== session) return;
-        const music = take.bars.map(bar => window.note(bar.notes).s(bar.synth));
+        const music = take.bars.map(bar => window.note(bar.notes).s(bar.synth).clip(bar.clip).fast(bar.fast));
         usingStrudel = true;
         await window.slowcat(...music).cpm(60 / take.seconds).play();
         if (token !== session) return;

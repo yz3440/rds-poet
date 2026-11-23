@@ -1,6 +1,7 @@
 """Extract acoustic cues from a broadcast FM station."""
 
 from contextlib import contextmanager
+from itertools import cycle
 import math
 import subprocess
 import threading
@@ -10,6 +11,8 @@ from scipy import signal
 
 
 AUDIO_RATE = 32_000
+IQ_RATE = 8_000_000
+TUNE_OFFSET = 250_000
 
 
 def describe(audio, mhz):
@@ -33,20 +36,45 @@ def describe(audio, mhz):
 def capture_hackrf(mhz):
     # Two seconds of signed eight-bit interleaved I/Q. The subprocess releases
     # the device before the caller can construct the transmitter.
-    rate = 8_000_000
-    count = 2 * rate
+    count = 2 * IQ_RATE
     recording = subprocess.run(
-        ["hackrf_transfer", "-r", "-", "-f", str(round(mhz * 1e6)),
-         "-s", str(rate), "-n", str(count), "-l", "16", "-g", "16"],
+        ["hackrf_transfer", "-r", "-", "-f", str(round(mhz * 1e6) - TUNE_OFFSET),
+         "-s", str(IQ_RATE), "-n", str(count), "-l", "32", "-g", "24"],
         capture_output=True, timeout=15,
     )
     if recording.returncode or len(recording.stdout) != count * 2:
         raise RuntimeError("Incomplete HackRF capture: " + recording.stderr.decode(errors="replace")[-500:])
     iq = np.frombuffer(recording.stdout, np.int8).astype(np.float32).view(np.complex64)
+    return describe_channel(iq, mhz)
+
+
+def describe_channel(iq, mhz):
+    # Mix the station to baseband. The receiver's DC spike then lies outside
+    # the FM channel instead of overwhelming a weak broadcast during demodulation.
+    period = IQ_RATE // TUNE_OFFSET
+    mixer = np.exp(-2j * np.pi * np.arange(period) / period).astype(np.complex64)
+    iq.reshape(-1, period)[:] *= mixer
     channel = signal.resample_poly(iq, 1, 32)  # 250 kHz complex FM channel
     mpx = np.angle(channel[1:] * channel[:-1].conj()) * 250_000 / (2*np.pi*75_000)
     audio = signal.resample_poly(mpx, 16, 125)
-    return describe(audio[AUDIO_RATE // 4:], mhz)
+    cue = describe(audio[AUDIO_RATE // 4:], mhz)
+    # An empty FM channel can demodulate into loud noise. Compare out-of-band
+    # discriminator noise to the mono programme before giving it to the poet.
+    freq, power = signal.welch(mpx[62_500:], 250_000, nperseg=1024)
+    hiss = power[(freq >= 80_000) & (freq <= 95_000)].mean()
+    programme = power[(freq >= 60) & (freq <= 14_000)].mean()
+    if hiss * 15_000 > 0.12**2 and hiss > 0.4 * programme:
+        cue += ", mostly radio hiss"
+    return cue
+
+
+def station_cues(frequencies, *, before_tx=False):
+    """Rotate stations, releasing the single HackRF before FM output starts."""
+    if before_tx:
+        observations = [capture_hackrf(mhz) for mhz in frequencies]
+        return cycle(observations).__next__
+    stations = cycle(frequencies)
+    return lambda: capture_hackrf(next(stations))
 
 
 @contextmanager

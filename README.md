@@ -12,10 +12,10 @@ On the Linux machine with GNU Radio, run these from the repository root. The bui
 /usr/bin/python3 perform.py --model pocket --theme "the last spoon in the kitchen"
 ```
 
-To send the music and poem to the iPod using the tested gain setting, run
+To send a new Qwen poem to the iPod, pick two local stations you can hear. This example listens to 105.7 and 88.1 MHz before starting the music and RadioText on 100.0 MHz. The local Ollama service must be running.
 
 ```sh
-/usr/bin/python3 perform.py --model pocket --fm --tx-gain-db 40 --line-seconds 10
+/usr/bin/python3 perform.py --sample-mhz 105.7 88.1 --fm --tx-gain-db 40
 ```
 
 Tune the iPod to 100.0 MHz. On a fifth-generation nano, if the dial skips from 99.9 to 100.1, choose Radio → Radio Regions → Europe for 0.1 MHz steps. Use `--fm 87.5` or another frequency to override the transmit default. [Apple’s tuning table, page 66](https://cdsassets.apple.com/live/6GJYWVAV/user/ma1194_ipod_nano_5th_gen_userguide.pdf#page=66)
@@ -39,10 +39,10 @@ ollama pull qwen2.5:1.5b
 
 ## Let the air suggest the next line
 
-HackRF One is half-duplex. With one device, `--sample-mhz` listens for two seconds, closes the receiver, then opens the transmitter. Every line can draw on that first impression and the history of the poem. Replace 99.5 with a public FM station you can hear where you are. [HackRF One specifications](https://hackrf.readthedocs.io/en/latest/hackrf_one.html)
+With no receiver option, the live generator uses the theme and an imagined room tone. With `--sample-mhz` and speaker or WAV output, the HackRF takes a fresh two-second sample for each composition, visiting your stations in order. With FM output, it samples every selected frequency once before transmission, then alternates those stored observations as it writes new lines. The terminal prints the cue for each composition. [HackRF One half-duplex specifications](https://hackrf.readthedocs.io/en/latest/hackrf_one.html)
 
 ```sh
-/usr/bin/python3 perform.py --model pocket --sample-mhz 99.5 --fm --tx-gain-db 40
+/usr/bin/python3 perform.py --sample-mhz 105.7 88.1
 ```
 
 With a second device, an RTL-SDR tuned to the source station can keep supplying new observations while the HackRF transmits. Each model request gets the latest one-second audio window. This mode needs the `rtl_fm` utility. Both modes describe acoustic features such as brightness, level and pulse. They use these measurements as prompts. Speech transcription would be a separate input.
@@ -53,6 +53,6 @@ With a second device, an RTL-SDR tuned to the source station can keep supplying 
 
 ## Score and runtime
 
-Both generators emit a line of up to 64 printable ASCII characters and a Strudel expression like `note("d3 ~ a3 c4").s("triangle")`. The audio renderer implements these monophonic, equal-duration notes and rests in Python, with sine and triangle oscillators at 48 kHz. You can also play the printed source in Strudel with the printed `setcps(...)` tempo. Strudel’s own synth envelopes can sound different. [Strudel synthesizers](https://strudel.cc/learn/synths/)
+Each phrase pairs up to 64 printable ASCII characters with playable Strudel, for example `note("d3 ~ a3 c4").s("triangle").clip(0.35).fast(2)`. The model writes the pitches and rests. The performer shuffles four voices across successive lines, giving sine notes room to ring, clipping square notes into taps, and varying the articulation and speed of the triangle and sawtooth figures. The speaker, WAV and FM paths synthesize the printed score in Python at 48 kHz. You can play the same expression in Strudel with the printed `setcps(...)` tempo. [Strudel synthesizers](https://strudel.cc/learn/synths/) · [Strudel timing controls](https://strudel.cc/learn/time-modifiers/)
 
-The performance requires Python 3, NumPy and GNU Radio 3.10. The FM output also uses gr-osmosdr with HackRF support and the HackRF tools. Radio input additionally uses SciPy. Rehearse the same three phrases repeatedly with `/usr/bin/python3 perform.py --score examples/rehearsal.jsonl`. For the original manual-title and MP3 transmitter commands, see the [radio guide](radio/README.md).
+The performance requires Python 3, NumPy and GNU Radio 3.10. The FM output also uses gr-osmosdr with HackRF support and the HackRF tools. Radio input additionally uses SciPy. A saved score plays once. Add `--loop-score` for a repeating rehearsal, for example `/usr/bin/python3 perform.py --score examples/rehearsal.jsonl --loop-score`. For the original manual-title and MP3 transmitter commands, see the [radio guide](radio/README.md).

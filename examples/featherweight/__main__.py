@@ -2,7 +2,6 @@
 
 import argparse
 import json
-import math
 from pathlib import Path
 import re
 from time import monotonic
@@ -12,7 +11,7 @@ import wave
 import numpy as np
 
 from radio.live_rds import DEFAULT_LINE_SECONDS
-from score import PATTERN, RATE, generate, render
+from score import Composer, PATTERN, RATE, render
 
 
 HERE = Path(__file__).resolve().parent
@@ -22,47 +21,41 @@ ARCHIVE_CUE = (
     'Track title: Das Leichteste der Welt (the lightest thing in the world).'
 )
 LINE_PROMPTS = (
-    "Name a small everyday object that the radio cue brings to mind. Put it somewhere specific.",
-    "Begin with 'Under'. Show something moving beside the object from line one.",
-    "Begin with a sound such as 'Tick' or 'Hush'. Name the second object that makes it.",
-    "Begin with 'Only'. End on a visible trace left by the movement or sound.",
+    "Place an everyday object somewhere specific.",
+    "Show something moving at the edge of that scene.",
+    "Give the sound to a different object.",
+    "End on a visible trace left by the movement or sound.",
 )
 
 
-def compose(model, cue):
-    history = []
+def compose(model, next_cue):
+    composer = Composer(model)
     phrases = []
+    cues = []
     for index, instruction in enumerate(LINE_PROMPTS):
         theme = f"English poem, line {index + 1} of four. {instruction} Use your own words."
         start = monotonic()
-        for attempt in range(3):
-            try:
-                reply = generate(model, theme, cue, history)
-                phrase = render(reply, DEFAULT_LINE_SECONDS)
-                if phrase.line in history:
-                    raise ValueError("repeated line")
-            except (ValueError, TypeError, KeyError) as exc:
-                if attempt == 2:
-                    raise ValueError(f"Line {index + 1}: three unusable replies ({exc})") from exc
-            else:
-                break
+        cue = next_cue()
+        print(cue, flush=True)
+        phrase = composer.compose(theme, cue, DEFAULT_LINE_SECONDS)
         print(f"{monotonic() - start:.1f}s   {phrase.line}", flush=True)
-        history.append(phrase.line)
+        cues.append(cue)
         phrases.append(phrase)
-    return phrases
+    return phrases, cues
 
 
-def save_take(out, phrases, cue, credit):
+def save_take(out, phrases, cues, credit):
     rows = [{"line": phrase.line, "strudel": phrase.strudel} for phrase in phrases]
     expressions = ",\n  ".join(phrase.strudel for phrase in phrases)
     program = f"setcps({1 / DEFAULT_LINE_SECONDS})\nslowcat(\n  {expressions}\n)\n"
 
     # The web player builds the same patterns using the public Strudel API.
     notes = []
-    for phrase in phrases:
+    for phrase, cue in zip(phrases, cues):
         match = re.fullmatch(PATTERN, phrase.strudel)
-        notes.append({"notes": match[1], "synth": match[2], "line": phrase.line})
-    payload = {"cue": cue, "credit": credit, "bars": notes, "seconds": DEFAULT_LINE_SECONDS}
+        notes.append({"notes": match[1], "synth": match[2], "clip": float(match[3] or 1),
+                      "fast": int(match[4] or 1), "line": phrase.line, "cue": cue})
+    payload = {"credit": credit, "bars": notes, "seconds": DEFAULT_LINE_SECONDS}
     html = (HERE / "player.html.in").read_text(encoding="utf-8")
     html = html.replace("__TAKE_JSON__", json.dumps(payload, ensure_ascii=True).replace("<", "\\u003c"))
 
@@ -80,26 +73,27 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", default=DEFAULT_MODEL, help="installed Ollama model for a new take")
     inputs = parser.add_mutually_exclusive_group()
-    inputs.add_argument("--sample-mhz", type=float, help="take a short acoustic sample with HackRF")
+    inputs.add_argument("--sample-mhz", type=float, nargs="+", metavar="MHZ",
+                        help="take a fresh HackRF sample per line, rotating through these stations")
     inputs.add_argument("--reference", action="store_true", help="render the included Codex-written session")
     parser.add_argument("--out", type=Path, default=Path("build/featherweight"))
     args = parser.parse_args()
-    cue = ARCHIVE_CUE
     try:
         if args.reference:
             source = (HERE / "reference.jsonl").read_text(encoding="utf-8")
             phrases = [render(json.loads(line), DEFAULT_LINE_SECONDS) for line in source.splitlines()]
+            cues = [ARCHIVE_CUE] * len(phrases)
             credit = "Reference take written by Codex"
         else:
-            if args.sample_mhz is not None:
-                if not math.isfinite(args.sample_mhz) or not 87.5 <= args.sample_mhz <= 108:
+            next_cue = lambda: ARCHIVE_CUE
+            if args.sample_mhz:
+                if any(not 87.5 <= freq <= 108 for freq in args.sample_mhz):
                     parser.error("--sample-mhz must be between 87.5 and 108")
-                from radio.listen import capture_hackrf
-                cue = capture_hackrf(args.sample_mhz)
-            print(cue, flush=True)
-            phrases = compose(args.model, cue)
+                from radio.listen import station_cues
+                next_cue = station_cues(args.sample_mhz)
+            phrases, cues = compose(args.model, next_cue)
             credit = f"Local model · {args.model}"
-        save_take(args.out, phrases, cue, credit)
+        save_take(args.out, phrases, cues, credit)
     except HTTPError as exc:
         parser.exit(1, f"Ollama HTTP {exc.code}: {exc.read(512).decode(errors='replace')}\n")
     except URLError as exc:

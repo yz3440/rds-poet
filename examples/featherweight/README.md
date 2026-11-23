@@ -21,16 +21,22 @@ ollama pull qwen2.5:1.5b
 /usr/bin/python3 -m examples.featherweight --out build/featherweight-qwen
 ```
 
-To draw on the sound at the antenna, replace 99.5 below with a public FM station you can receive. The HackRF listens for two seconds, closes, and supplies the measured level, brightness and pulse to the model. The player shows the cue used.
+To draw on the sound at the antenna, choose public FM stations you can receive. The HackRF visits them in order, taking a fresh two-second sample for each line. The player shows the corresponding cue as each phrase plays.
 
 ```sh
-/usr/bin/python3 -m examples.featherweight --sample-mhz 99.5 --out build/featherweight-live
+/usr/bin/python3 -m examples.featherweight --sample-mhz 105.7 88.1 --out build/featherweight-live
 ```
 
-To play that take on the iPod, use the existing transmitter with the generated score. Tune to 100.0 MHz. The take loops until Ctrl+C.
+To play those four lines once on the iPod, tune to 100.0 MHz and use the generated score. Add `--loop-score` to repeat the take.
 
 ```sh
 /usr/bin/python3 perform.py --score build/featherweight-live/score.jsonl --fm --tx-gain-db 40
+```
+
+For a continuing poem, run the performer directly. The single HackRF samples the selected stations before transmission, then Qwen composes fresh lines from the alternating cues.
+
+```sh
+/usr/bin/python3 perform.py --sample-mhz 105.7 88.1 --fm --tx-gain-db 40
 ```
 
 The [four-line Qwen take](qwen-take.jsonl) was generated on this ThinkPad from the archived MDR JUMP cue. Across three completed takes with the model already loaded on CPU, the median time for an accepted line and its notes was 4.0 seconds. The slowest took 9.6 seconds. The saved take took 15.6 seconds to compose and plays for 40 seconds. To hear this exact result on speakers, run `/usr/bin/python3 perform.py --score examples/featherweight/qwen-take.jsonl --bars 4` from the repository root.
