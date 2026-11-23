@@ -5,6 +5,8 @@ import re
 
 import numpy as np
 
+from radio.cues import split_cue
+
 
 class PocketPoet:
     """A conditional next-token network trained on paired verse and note sequences."""
@@ -85,13 +87,15 @@ class PocketPoet:
         return words
 
     def reply(self, theme, cue, history):
-        acoustic, _, words = cue.partition("\nWhisper transcript: ")
+        acoustic, neighbor, words = split_cue(cue)
         reg = "midrange"
         for word, value in [("still", "quiet"), ("bright", "bright"), ("low", "low")]:
             if word in acoustic.lower():
                 reg = value
                 break
         pulse = "pulsing" if "pulsing" in acoustic else "steady"
+        if "attacks/s" in neighbor:
+            pulse = "pulsing" if "frequent attacks" in neighbor else "steady"
         anchors = set(re.findall(r"[a-z]{3,}", " ".join([theme, words, *history[-1:]]).lower()))
         anchors -= {"the", "and", "with"}
         line = " ".join(self.sample(reg, pulse, "verse", 8, anchors))

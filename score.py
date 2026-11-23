@@ -9,6 +9,7 @@ from urllib.request import Request, urlopen
 import numpy as np
 
 from arrangement import arrange, choose_section, edit_motif
+from radio.cues import split_cue
 from radio.live_rds import validate_title
 from sketch import BARE_PATTERN, RATE, STARTER, SYNTHS, mix, parse_layers, stack_code
 
@@ -18,7 +19,8 @@ from sketch import BARE_PATTERN, RATE, STARTER, SYNTHS, mix, parse_layers, stack
 MODEL_PATTERN = BARE_PATTERN.replace('"', "'")
 INSTRUCTIONS = """Write a brief, concrete image in printable ASCII and a pitched Strudel edit.
 Overheard speech is source material: transform one detail into a physical image in your own words.
-Let the station's pulse or brightness shape the music. Use the requested register and rhythm.
+Use nearby_station for rhythm when present. Give an object in the poem that same movement.
+Keep instructions, frequency labels and measurement terms out of the poem. Use the requested register and rhythm.
 Use lowercase note names with octaves, ~ for a rest, and the requested synth.
 Return JSON with line and strudel."""
 
@@ -60,14 +62,16 @@ def generate(model, theme, cue, history, synth=None, *, layers=None, target=None
     schema = {
         "type": "object",
         "properties": {
-            "line": {"type": "string", "minLength": 1, "maxLength": 64},
+            "line": {"type": "string", "pattern": "^[ -~]{1,64}$"},
             "strudel": {"type": "string", "pattern": "^" + pattern + "$"},
         },
         "required": ["line", "strudel"],
         "additionalProperties": False,
     }
-    acoustic, _, speech = cue.partition("\nWhisper transcript: ")
+    acoustic, nearby, speech = split_cue(cue)
     prompt = {"theme": theme, "air": acoustic, "synth": synth or "choose sine, triangle, sawtooth or square"}
+    if nearby:
+        prompt["nearby_station"] = nearby
     if speech:
         prompt["overheard_speech"] = speech
     if layers is not None:
@@ -200,7 +204,7 @@ class Composer:
                 if not isinstance(reply["line"], str):
                     raise ValueError("Missing poem line")
                 line = validate_title(reply["line"].strip())
-                _, _, speech = cue.partition("\nWhisper transcript: ")
+                _, _, speech = split_cue(cue)
                 words = re.findall(r"[a-z0-9']+", line.lower())
                 heard = re.findall(r"[a-z0-9']+", speech.lower())
                 if len(words) >= 4 and f" {' '.join(words)} " in f" {' '.join(heard)} ":

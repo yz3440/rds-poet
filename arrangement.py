@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 
+from radio.cues import split_cue
 from sketch import Layer
 
 
@@ -22,9 +23,13 @@ HIGH_TAPS = Section("syncopated taps", "square", 4, (6, 8), 0.20, 4)
 
 
 def choose_section(cue, last, used_sections):
-    acoustic = cue.partition("\n")[0].lower()
-    bright = "bright" in acoustic or "hiss" in acoustic
+    lead, nearby, _ = split_cue(cue)
+    acoustic = lead.partition("\n")[0].lower()
     pulsing = "pulsing" in acoustic
+    if "attacks/s" in nearby:
+        acoustic = nearby.lower()
+        pulsing = "frequent attacks" in acoustic
+    bright = "bright" in acoustic or "hiss" in acoustic
     busy = last.fast == 1 if last else pulsing
     if busy:
         first, other = (HIGH_TAPS, RUNNING_BASS) if bright or pulsing else (RUNNING_BASS, HIGH_TAPS)

@@ -6,10 +6,12 @@ from contextlib import contextmanager
 from itertools import cycle
 import math
 import subprocess
+import sys
 import threading
 
 import numpy as np
 from scipy import signal
+from radio.cues import pair_observations
 from radio.transcription import SPEECH_SECONDS, Whisper, speech_cue
 
 
@@ -26,14 +28,27 @@ def describe(audio, mhz):
     label = f"{mhz:g} MHz FM"
     if rms < 0.002:
         return f"{label}: nearly still"
-    freq, power = signal.welch(x, AUDIO_RATE, nperseg=min(1024, len(x)))
-    band = (freq >= 60) & (freq < 14_000)
-    center = np.average(freq[band], weights=power[band] + 1e-20)
+    # A 32 ms Hann window, advanced by 10 ms. Positive spectral flux counts
+    # attacks even when a change of sound barely changes the overall level.
+    freq, _, magnitude = signal.spectrogram(
+        x, AUDIO_RATE, window="hann", nperseg=1024, noverlap=704, scaling="spectrum", mode="magnitude",
+    )
+    audible = (freq >= 60) & (freq < 14_000)
+    band = magnitude[audible]
+    center = np.average(freq[audible], weights=(band**2).mean(axis=1) + 1e-20)
+    flux = np.maximum(np.diff(band, axis=1), 0).sum(axis=0)
+    flux /= max(band.sum(axis=0).mean(), 1e-12)
+    background = np.median(flux)
+    threshold = max(0.10, background + 2 * np.median(abs(flux - background)))
+    peaks, _ = signal.find_peaks(flux, height=threshold, prominence=0.05, distance=8)
+    attacks = len(peaks) * AUDIO_RATE / len(x)
+    activity = "frequent attacks" if attacks >= 2.5 else "sparse attacks"
     tone = "low and muffled" if center < 900 else "bright and thin" if center > 3200 else "midrange"
     windows = x[:len(x) // 320 * 320].reshape(-1, 320)
     levels = np.sqrt(np.mean(windows**2, axis=1))
     texture = "pulsing" if levels.std() > 0.35 * rms else "steady"
-    return f"{label}: {tone}, {texture}, audio level {20 * math.log10(rms):.0f} dBFS"
+    return (f"{label}: {tone}, {texture}, audio level {20 * math.log10(rms):.0f} dBFS, "
+            f"centroid {center:.0f} Hz, {activity} ({attacks:.1f} attacks/s)")
 
 
 def receive_iq(center_hz, count):
@@ -79,24 +94,75 @@ def describe_channel(iq, mhz):
 def describe_baseband(channel, mhz, recognizer=None):
     mpx = np.angle(channel[1:] * channel[:-1].conj()) * 250_000 / (2*np.pi*75_000)
     audio = signal.resample_poly(mpx, 16, 125)[AUDIO_RATE // 4:]
-    cue = describe(audio, mhz)
     # An empty FM channel can demodulate into loud noise. Compare out-of-band
     # discriminator noise to the mono programme before giving it to the poet.
-    freq, power = signal.welch(mpx[62_500:], 250_000, nperseg=1024)
+    settled = mpx[62_500:]
+    freq, power = signal.welch(settled, 250_000, nperseg=1024)
     hiss = power[(freq >= 80_000) & (freq <= 95_000)].mean()
     programme = power[(freq >= 60) & (freq <= 14_000)].mean()
-    if hiss * 15_000 > 0.12**2 and hiss > 0.4 * programme:
-        cue += ", mostly radio hiss"
+    if abs(settled.mean()) * 75_000 > 25_000:
+        cue = f"{mhz:g} MHz FM: off-center signal, likely adjacent-channel bleed"
+    elif hiss * 15_000 > 0.12**2 and hiss > 0.4 * programme:
+        cue = f"{mhz:g} MHz FM: mostly radio hiss"
+    else:
+        cue = describe(audio, mhz)
     return speech_cue(cue, audio, recognizer)
 
 
-def station_cues(frequencies, *, before_tx=False, recognizer=None):
-    """Rotate stations, releasing the single HackRF before FM output starts."""
+def station_cues(frequencies, *, neighbors=None, before_tx=False, recognizer=None):
+    """Rotate station pairs, releasing the single HackRF before FM output starts."""
+    neighbors = neighbors or {}
+
+    def observe(mhz, capture):
+        lead = capture(mhz, recognizer)
+        neighbor = neighbors.get(mhz)
+        if neighbor is None:
+            return lead
+        return pair_observations(lead, capture(neighbor, None))
+
     if before_tx:
-        observations = [capture_hackrf(mhz, recognizer) for mhz in frequencies]
+        stored = {mhz: capture_hackrf(mhz, recognizer) for mhz in dict.fromkeys(frequencies)}
+        for mhz in neighbors.values():
+            if mhz not in stored:
+                stored[mhz] = capture_hackrf(mhz)
+        observations = [observe(mhz, lambda freq, _: stored[freq]) for mhz in frequencies]
         return cycle(observations).__next__
     stations = cycle(frequencies)
-    return lambda: capture_hackrf(next(stations), recognizer)
+    return lambda: observe(next(stations), capture_hackrf)
+
+
+def hackrf_cues(frequencies=None, *, scan=True, dial=100.0, neighbor_offset_khz=None,
+                before_tx=False, recognizer=None):
+    from radio.scan import survey
+
+    if not scan and neighbor_offset_khz is None:
+        return station_cues(frequencies, before_tx=before_tx, recognizer=recognizer)
+    stations = survey() if scan else []
+    usable = [s for s in stations if not (before_tx and abs(s.mhz - dial) < 0.05)]
+    clear = [s.mhz for s in usable if s.clear]
+    detected = [s.mhz for s in usable]
+    sources = frequencies or sorted(clear or detected, key=lambda mhz: (round(abs(mhz - dial), 3), mhz))[:2]
+    if not sources:
+        raise RuntimeError("No source stations detected. Reposition the antenna or try --no-scan --sample-mhz MHZ.")
+    neighbors = {}
+    for mhz in sources:
+        others = [other for other in clear if abs(mhz - other) >= 0.15]
+        if not others:
+            others = [other for other in detected if abs(mhz - other) >= 0.15]
+        if neighbor_offset_khz is not None:
+            near = round(mhz + neighbor_offset_khz / 1000, 6)
+            if not 87.5 <= near <= 108:
+                print(f"Source {mhz:g} MHz, requested neighbor outside the FM band", file=sys.stderr)
+                continue
+        elif others:
+            near = min(others, key=lambda other: (round(abs(mhz - other), 3), other))
+        else:
+            print(f"Source {mhz:g} MHz, no distinct neighbor detected", file=sys.stderr, flush=True)
+            continue
+        neighbors[mhz] = near
+        print(f"Source {mhz:g} MHz, nearby channel {near:g} MHz ({near - mhz:+.1f} MHz)",
+              file=sys.stderr, flush=True)
+    return station_cues(sources, neighbors=neighbors, before_tx=before_tx, recognizer=recognizer)
 
 
 @contextmanager

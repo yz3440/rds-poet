@@ -78,14 +78,24 @@ def main():
     inputs.add_argument("--sample-mhz", type=float, nargs="+", metavar="MHZ",
                         help="take a fresh HackRF sample per line, rotating through these stations")
     inputs.add_argument("--reference", action="store_true", help="render the included Codex-written session")
+    parser.add_argument("--scan", action=argparse.BooleanOptionalAction, default=None,
+                        help="survey the FM dial for local stations (automatic with --sample-mhz)")
     parser.add_argument("--sketch", type=Path, help="start from this pitched Strudel sketch")
     parser.add_argument("--edit-size", choices=("bold", "subtle"), default="bold",
                         help="size of each generated sketch edit (default: %(default)s)")
+    parser.add_argument("--neighbor-offset-khz", type=int, choices=(-200, -100, 100, 200),
+                        help="sample this exact offset from each source, including quiet channels")
     parser.add_argument("--transcribe", action="store_true", help="include spoken English from FM samples")
     parser.add_argument("--out", type=Path, default=Path("build/featherweight"))
     args = parser.parse_args()
-    if args.transcribe and not args.sample_mhz:
-        parser.error("--transcribe needs --sample-mhz")
+    if args.scan and args.reference:
+        parser.error("--scan requires a generated take")
+    if args.scan is None:
+        args.scan = bool(args.sample_mhz)
+    if args.neighbor_offset_khz and not (args.scan or args.sample_mhz):
+        parser.error("--neighbor-offset-khz needs a HackRF source")
+    if args.transcribe and not (args.scan or args.sample_mhz):
+        parser.error("--transcribe needs --scan or --sample-mhz")
     if args.reference and args.sketch:
         parser.error("--sketch requires a generated take")
     try:
@@ -96,11 +106,12 @@ def main():
             credit = "Reference take written by Codex"
         else:
             next_cue = lambda: ARCHIVE_CUE
-            if args.sample_mhz:
-                if any(not 87.5 <= freq <= 108 for freq in args.sample_mhz):
+            if args.scan or args.sample_mhz:
+                if any(not 87.5 <= freq <= 108 for freq in (args.sample_mhz or [])):
                     parser.error("--sample-mhz must be between 87.5 and 108")
-                from radio.listen import Whisper, station_cues
-                next_cue = station_cues(args.sample_mhz, recognizer=Whisper() if args.transcribe else None)
+                from radio.listen import Whisper, hackrf_cues
+                next_cue = hackrf_cues(args.sample_mhz, scan=args.scan, neighbor_offset_khz=args.neighbor_offset_khz,
+                                       recognizer=Whisper() if args.transcribe else None)
             phrases, cues = compose(args.model, next_cue, args.sketch, args.edit_size)
             credit = f"Local model · {args.model}"
         save_take(args.out, phrases, cues, credit)

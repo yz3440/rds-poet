@@ -15,6 +15,7 @@ import numpy as np
 import perform
 import score
 import sketch
+from radio.cues import pair_observations
 from radio.transcription import speech_cue
 from radio import listen
 from score import Phrase
@@ -173,6 +174,8 @@ class PerformanceTest(unittest.TestCase):
         reply = json.dumps({"line": "River in the window", "strudel": "note('g4').s('triangle')"})
         stream = io.BytesIO(json.dumps({"message": {"content": reply}}).encode())
         cue = speech_cue("88.1 MHz FM: bright and thin, steady", np.ones(100), lambda audio: "river ferry")
+        neighbor = "88.9 MHz FM: midrange, steady, sparse attacks (0.0 attacks/s)"
+        cue = pair_observations(cue, neighbor)
         composer = score.Composer("local", edit_size="subtle")
         layers = composer.layers
         with patch.object(score, "urlopen", return_value=stream) as post:
@@ -182,6 +185,7 @@ class PerformanceTest(unittest.TestCase):
         self.assertEqual(prompt["current_sketch"], [layer.code() for layer in layers])
         self.assertEqual(prompt["edit_layer"], 3)
         self.assertEqual(prompt["air"], cue.splitlines()[0])
+        self.assertEqual(prompt["nearby_station"], neighbor)
         self.assertEqual(prompt["overheard_speech"], "river ferry")
         self.assertIn("river ferry", phrase.cue)
 

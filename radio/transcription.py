@@ -42,7 +42,7 @@ class Whisper:
 def speech_cue(cue, audio, recognizer):
     if recognizer is None:
         return cue
-    if "nearly still" in cue or "mostly radio hiss" in cue:
-        return cue + "\nWhisper skipped silence or hiss."
+    if any(label in cue for label in ("nearly still", "mostly radio hiss", "off-center signal")):
+        return cue + "\nWhisper skipped an unclear channel."
     transcript = recognizer(audio)
     return cue + ("\nWhisper transcript: " + transcript if transcript else "\nWhisper returned no clear words.")

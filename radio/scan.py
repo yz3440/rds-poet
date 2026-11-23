@@ -45,6 +45,7 @@ class Station:
     mhz: float
     excess_db: float
     pilot: bool
+    clear: bool
 
 
 def measure_window(iq, center_khz, channels):
@@ -99,8 +100,9 @@ def confirmed(first, second):
     for khz, a in first.items():
         b = second[khz]
         if a.likely_fm and b.likely_fm:
-            candidates.append(Station(khz / 1000, min(a.excess_db, b.excess_db),
-                                      min(a.pilot_db, b.pilot_db) >= 9))
+            strength = min(a.excess_db, b.excess_db)
+            clear = strength >= 10 and max(a.hiss, b.hiss) <= 0.12
+            candidates.append(Station(khz / 1000, strength, min(a.pilot_db, b.pilot_db) >= 9, clear))
     kept = []
     for station in sorted(candidates, key=lambda s: -s.excess_db):
         if all(abs(s.mhz - station.mhz) > 0.15 for s in kept):
@@ -108,20 +110,22 @@ def confirmed(first, second):
     return sorted(kept, key=lambda s: s.mhz)
 
 
-def survey():
+def survey(*, output=None):
+    output = sys.stderr if output is None else output
     print("Scanning 87.5–108.0 MHz in 100 kHz steps (pass 1/2)…", file=sys.stderr, flush=True)
     first = sweep(0)
     print("Checking the band again with offset tunings (pass 2/2)…", file=sys.stderr, flush=True)
     stations = confirmed(first, sweep(300))
-    print(f"Likely FM stations ({len(stations)}), dB above the estimated RF floor:", file=sys.stderr)
+    print(f"Likely FM stations ({len(stations)}), dB above the estimated RF floor:", file=output)
     for station in stations:
         pilot = ", 19 kHz pilot" if station.pilot else ""
-        print(f"  {station.mhz:5.1f} MHz   +{station.excess_db:.1f} dB{pilot}", file=sys.stderr)
+        quality = "" if station.clear else ", weak reception"
+        print(f"  {station.mhz:5.1f} MHz   +{station.excess_db:.1f} dB{pilot}{quality}", file=output)
     return stations
 
 
 if __name__ == "__main__":
     try:
-        survey()
+        survey(output=sys.stdout)
     except (OSError, RuntimeError) as exc:
         sys.exit(f"Scan stopped: {exc}")

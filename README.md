@@ -9,13 +9,13 @@ For a 40-second test with a read-along player, a Strudel score and a model sized
 On the Linux machine with GNU Radio, run these from the repository root. The built-in model learns word, rhythm and pitch sequences from the [original verse and note pairs](examples/air-poems.tsv) at startup. It runs in NumPy with a small vocabulary. This command plays through the system speakers.
 
 ```sh
-/usr/bin/python3 perform.py --model pocket --theme "the last spoon in the kitchen"
+/usr/bin/python3 perform.py --no-scan --model pocket --theme "the last spoon in the kitchen"
 ```
 
-To send a new Qwen poem to the iPod, run `./setup-ollama.sh` once, then pick two local stations you can hear. This example listens to 105.7 and 88.1 MHz before starting the music and RadioText on 100.0 MHz.
+To send a new Qwen poem to the iPod, run `./setup-ollama.sh` once. The performer surveys the local FM dial, samples stations near 100.0 MHz, then starts the music and RadioText.
 
 ```sh
-/usr/bin/python3 perform.py --sample-mhz 105.7 88.1 --fm --tx-gain-db 40
+/usr/bin/python3 perform.py --fm --tx-gain-db 40
 ```
 
 Tune the iPod to 100.0 MHz. On a fifth-generation nano, if the dial skips from 99.9 to 100.1, choose Radio → Radio Regions → Europe for 0.1 MHz steps. Use `--fm 87.5` or another frequency to override the transmit default. [Apple’s tuning table, page 66](https://cdsassets.apple.com/live/6GJYWVAV/user/ma1194_ipod_nano_5th_gen_userguide.pdf#page=66)
@@ -25,7 +25,7 @@ The terminal prints each new line and its playable Strudel source. Each cycle la
 For a local audio recording and the matching score transcript, run
 
 ```sh
-/usr/bin/python3 perform.py --model pocket --wav-out poem.wav --bars 6 > poem.txt
+/usr/bin/python3 perform.py --no-scan --model pocket --wav-out poem.wav --bars 6 > poem.txt
 ```
 
 ## Use the pretrained language model
@@ -39,19 +39,27 @@ From the repository root on Linux, run the setup script below. It uses Ollama’
 
 ## Let the air suggest the next line
 
-To see what the HackRF hears, sample each station once and print its frequency, tonal balance, pulse and level. This command uses just the receiver.
+A live performance starts with a HackRF survey. To see the station list by itself, run
 
 ```sh
-/usr/bin/python3 -m radio.listen 105.7 88.1
+/usr/bin/python3 -m radio.scan
 ```
 
-With no receiver option, the live generator uses the theme and an imagined room tone. With `--sample-mhz` and speaker or WAV output, the HackRF normally takes a fresh two-second sample for each composition, visiting your stations in order. With FM output, it samples every selected frequency once before transmission, then alternates those stored observations as it writes new lines. The terminal prints the cue for each composition. [HackRF One half-duplex specifications](https://hackrf.readthedocs.io/en/latest/hackrf_one.html)
+The receiver checks 206 dial positions from 87.5 through 108.0 MHz, then repeats the sweep with shifted tuner centers. A candidate must rise above the measured RF floor in both passes and show FM modulation. The scanner checks tuning offset, high-frequency hiss and the 19 kHz stereo pilot. Mono stations can qualify through modulation and low hiss. The inventory reports frequencies and relative strength at your antenna. Weak signals may come and go between scans.
+
+The performer picks up to two clear source stations closest to the output frequency (100.0 MHz for speakers). For each source it samples the nearest distinct station with clear reception. The printed offset shows how far apart they are. When only weak stations are available it can use those too. With `--sample-mhz`, your choices take priority as the sources. To hear a particular pair of frequencies as *sources* with no survey or neighbor samples, add `--no-scan`. For a theme-only performance, use `--no-scan` alone.
+
+To sample the very next dial position, use `--neighbor-offset-khz 100` or `200`. Negative offsets tune below the source. For example, `--sample-mhz 105.7 --neighbor-offset-khz 200` listens to 105.7 and 105.9 MHz even if the second channel is mostly hiss.
+
+Each observation includes loudness, spectral centroid in Hz and an estimate of attacks per second from rises in the short-time spectrum. Qwen gets both observations. In the default bold arrangement, the source helps select the layer to edit. The neighbor’s brightness and attack density help choose the register and rhythm of the new section. The generated Strudel supplies the audible music.
 
 ```sh
-/usr/bin/python3 perform.py --sample-mhz 105.7 88.1
+/usr/bin/python3 perform.py --sample-mhz 105.7 --transcribe
 ```
 
-With a second device, an RTL-SDR tuned to the source station can keep supplying new observations while the HackRF transmits. Each model request gets the latest one-second audio window. This mode needs the `rtl_fm` utility. Both modes describe acoustic features such as brightness, level and pulse. Qwen uses these measurements as a writing prompt. Add `--transcribe` to include any English words Whisper recognizes.
+With speaker or WAV output the HackRF takes fresh samples for each composition. With FM output it captures the sources and neighbors once at startup, releases the device, then rotates the stored observations. The terminal prints the observations used for each line. To listen to specific frequencies once and print their measurements, run `/usr/bin/python3 -m radio.listen 105.7 88.1`. [HackRF One half-duplex specifications](https://hackrf.readthedocs.io/en/latest/hackrf_one.html)
+
+With a second device, `--rtl-mhz` uses a continuously tuned RTL-SDR as the source and skips the HackRF survey. It can keep supplying new observations while the HackRF transmits. Each model request gets the latest one-second audio window. This mode needs the `rtl_fm` utility. Both modes describe acoustic features such as brightness, level and pulse. Qwen uses these measurements as a writing prompt. Add `--transcribe` to include any English words Whisper recognizes.
 
 ```sh
 /usr/bin/python3 perform.py --model qwen2.5:1.5b --rtl-mhz 99.5 --fm --tx-gain-db 40
@@ -59,7 +67,7 @@ With a second device, an RTL-SDR tuned to the source station can keep supplying 
 
 ### Use spoken words from the radio
 
-Add `--transcribe` to take six seconds of FM audio per station, run the local English Whisper model and send its transcript and the acoustic cue to Qwen. To see what the recognizer heard before starting a performance, run:
+Add `--transcribe` to take six seconds of FM audio per source station, run the local English Whisper model and send its transcript and the acoustic cue to Qwen. To see what the recognizer heard before starting a performance, run:
 
 ```sh
 /usr/bin/python3 -m radio.listen --transcribe 105.7 88.1

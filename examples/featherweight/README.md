@@ -21,10 +21,10 @@ Run these commands from the repository root to set up Ollama and generate four n
 /usr/bin/python3 -m examples.featherweight --out build/featherweight-qwen
 ```
 
-To draw on the sound at the antenna, choose public FM stations you can receive. The HackRF visits them in order. With `--transcribe` it samples six seconds for each line and Whisper supplies the words it recognizes. The player shows the measurements and transcript as the corresponding three-layer sketch plays. Omit `--transcribe` for two-second acoustic cues.
+Use `--scan` to survey the FM band and pick sources near 100.0 MHz. For each line the HackRF samples both the source and a neighboring station. With `--transcribe`, Whisper listens to six seconds from the source. The neighbor supplies two seconds of acoustic measurements for the poem and arrangement. The player shows the observations with the corresponding sketch. Use `--sample-mhz 105.7 88.1` to choose the sources yourself.
 
 ```sh
-/usr/bin/python3 -m examples.featherweight --sample-mhz 105.7 88.1 --transcribe --out build/featherweight-live
+/usr/bin/python3 -m examples.featherweight --scan --transcribe --out build/featherweight-live
 ```
 
 To keep composing from the fourth line’s arrangement, pass `--sketch build/featherweight-live/last-set.strudel` to `perform.py`. The browser player links to that final sketch and to the full four-line score.

@@ -76,9 +76,9 @@ def run(args, cue):
         next_phrase = sequence.__next__
         first = next_phrase()
     else:
-        if args.sample_mhz and args.fm:
+        if (args.sample_mhz or args.scan) and args.fm:
             cue_label = "Pre-broadcast radio sample"
-        elif args.sample_mhz or args.rtl_mhz:
+        elif args.sample_mhz or args.rtl_mhz or args.scan:
             cue_label = "Radio sample"
         composer = Composer(args.model, args.sketch, args.edit_size)
         upcoming = Queue(maxsize=1)
@@ -172,6 +172,10 @@ def main():
     source.add_argument("--sample-mhz", type=float, nargs="+", metavar="MHZ",
                         help="rotate through FM stations on HackRF (capture all before FM transmission)")
     source.add_argument("--rtl-mhz", type=float, help="refresh FM cues continuously using an RTL-SDR")
+    parser.add_argument("--scan", action=argparse.BooleanOptionalAction, default=None,
+                        help="survey the FM dial and sample nearby stations (default for live HackRF input)")
+    parser.add_argument("--neighbor-offset-khz", type=int, choices=(-200, -100, 100, 200),
+                        help="sample this exact offset from each source, including quiet channels")
     parser.add_argument("--transcribe", action="store_true", help="use Whisper's English transcript as well as acoustic cues")
     parser.add_argument("--score", type=Path, help="play a saved JSONL score once")
     parser.add_argument("--loop-score", action="store_true", help="repeat the saved score")
@@ -195,10 +199,16 @@ def main():
             parser.error("choose an FM broadcast frequency between 87.5 and 108 MHz")
     if args.bars is not None and (args.bars < 1 or args.fm):
         parser.error("--bars requires a positive count and a speaker or WAV preview")
+    if args.scan and (args.score or args.rtl_mhz):
+        parser.error("--scan uses live HackRF input")
+    if args.scan is None:
+        args.scan = not (args.score or args.rtl_mhz)
     if args.score and (args.rtl_mhz or args.sample_mhz):
         parser.error("air cues require model generation")
-    if args.transcribe and not (args.sample_mhz or args.rtl_mhz):
-        parser.error("--transcribe needs --sample-mhz or --rtl-mhz")
+    if args.neighbor_offset_khz and not (args.scan or args.sample_mhz):
+        parser.error("--neighbor-offset-khz needs a HackRF source")
+    if args.transcribe and not (args.scan or args.sample_mhz or args.rtl_mhz):
+        parser.error("--transcribe needs a scan, --sample-mhz or --rtl-mhz")
     if args.loop_score and not args.score:
         parser.error("--loop-score requires --score")
     if args.score and args.sketch:
@@ -219,9 +229,11 @@ def main():
             if args.rtl_mhz:
                 from radio.listen import rtl_cues
                 cue = stack.enter_context(rtl_cues(args.rtl_mhz, recognizer))
-            elif args.sample_mhz:
-                from radio.listen import station_cues
-                cue = station_cues(args.sample_mhz, before_tx=args.fm is not None, recognizer=recognizer)
+            elif args.scan or args.sample_mhz:
+                from radio.listen import hackrf_cues
+                cue = hackrf_cues(args.sample_mhz, scan=args.scan, dial=args.fm or DEFAULT_FM_MHZ,
+                                  neighbor_offset_khz=args.neighbor_offset_khz,
+                                  before_tx=args.fm is not None, recognizer=recognizer)
             else:
                 cue = lambda: "Room tone imagined from the theme"
             run(args, cue)
