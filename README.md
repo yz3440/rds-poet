@@ -39,6 +39,12 @@ ollama pull qwen2.5:1.5b
 
 ## Let the air suggest the next line
 
+To see what the HackRF hears, sample each station once and print its frequency, tonal balance, pulse and level. This command uses just the receiver.
+
+```sh
+/usr/bin/python3 -m radio.listen 105.7 88.1
+```
+
 With no receiver option, the live generator uses the theme and an imagined room tone. With `--sample-mhz` and speaker or WAV output, the HackRF takes a fresh two-second sample for each composition, visiting your stations in order. With FM output, it samples every selected frequency once before transmission, then alternates those stored observations as it writes new lines. The terminal prints the cue for each composition. [HackRF One half-duplex specifications](https://hackrf.readthedocs.io/en/latest/hackrf_one.html)
 
 ```sh

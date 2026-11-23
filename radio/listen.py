@@ -1,5 +1,6 @@
-"""Extract acoustic cues from a broadcast FM station."""
+"""Print one two-second HackRF reception report per FM frequency and exit."""
 
+import argparse
 from contextlib import contextmanager
 from itertools import cycle
 import math
@@ -121,3 +122,20 @@ def rtl_cues(mhz):
                 proc.wait()
         worker.join(timeout=3)
         proc.stdout.close()
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("frequencies", type=float, nargs="+", metavar="MHZ")
+    args = parser.parse_args()
+    if any(not 87.5 <= mhz <= 108 for mhz in args.frequencies):
+        parser.error("choose FM broadcast frequencies between 87.5 and 108 MHz")
+    try:
+        for mhz in args.frequencies:
+            print(capture_hackrf(mhz), flush=True)
+    except (OSError, RuntimeError, subprocess.TimeoutExpired) as exc:
+        parser.exit(1, f"Reception stopped: {exc}\n")
+
+
+if __name__ == "__main__":
+    main()

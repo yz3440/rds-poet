@@ -36,6 +36,7 @@ class Phrase:
     line: str
     strudel: str
     audio: np.ndarray
+    cue: str | None = None
 
 
 def render(reply, seconds):
@@ -74,7 +75,8 @@ def render(reply, seconds):
             wave *= 0.65 if match[2] == "sawtooth" else 1
         envelope = np.minimum(1, t / 0.008) * np.clip((len(t) / RATE - t) / 0.05, 0, 1)
         audio[start:end] = 0.28 * envelope * wave
-    return Phrase(line, code, audio)
+    cue = reply.get("cue")
+    return Phrase(line, code, audio, cue if isinstance(cue, str) else None)
 
 
 def generate(model, theme, cue, history, synth=None):
@@ -186,7 +188,7 @@ class Composer:
                     raise ValueError("unusable note pattern")
                 code = (f'note("{match[1]}").s("{synth}")'
                         f'.clip({random.choice(gates)}).fast({random.choice(speeds)})')
-                phrase = render({"line": line, "strudel": code}, seconds)
+                phrase = render({"line": line, "strudel": code, "cue": cue}, seconds)
             except (ValueError, TypeError, KeyError) as exc:
                 if attempt == 2:
                     raise ValueError(f"No playable phrase after three replies: {exc}") from exc

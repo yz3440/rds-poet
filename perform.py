@@ -63,7 +63,9 @@ def run(args, cue):
     stopped = threading.Event()
     request_phrase = threading.Event()
     failure = []
+    cue_label = "Writing cue"
     if args.score:
+        cue_label = "Saved cue"
         with args.score.open(encoding="utf-8") as file:
             phrases = [render(json.loads(line), args.line_seconds) for line in file if line.strip()]
         if not phrases:
@@ -72,14 +74,16 @@ def run(args, cue):
         next_phrase = sequence.__next__
         first = next_phrase()
     else:
+        if args.sample_mhz and args.fm:
+            cue_label = "Pre-broadcast radio sample"
+        elif args.sample_mhz or args.rtl_mhz:
+            cue_label = "Radio sample"
         composer = Composer(args.model)
         upcoming = Queue(maxsize=1)
         next_phrase = upcoming.get_nowait
 
         def compose():
-            inspiration = cue()
-            print(f"Composing from: {inspiration}", file=sys.stderr, flush=True)
-            return composer.compose(args.theme, inspiration, args.line_seconds)
+            return composer.compose(args.theme, cue(), args.line_seconds)
 
         first = compose()
 
@@ -101,6 +105,8 @@ def run(args, cue):
     def display(phrase):
         if args.fm:
             graph.rds.set_title(phrase.line)
+        if phrase.cue:
+            print(f"{cue_label}: {phrase.cue}", file=sys.stderr, flush=True)
         print(f"{phrase.line}\n  {phrase.strudel}", flush=True)
         if not args.score and player.bars != 0:
             request_phrase.set()

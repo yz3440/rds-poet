@@ -98,6 +98,23 @@ class PerformanceTest(unittest.TestCase):
             result = [composer.compose("air", "steady", 0.25).line for _ in range(3)]
         self.assertEqual(result, [lines[0], lines[1], lines[3]])
 
+    def test_live_and_saved_phrases_keep_their_own_cue(self):
+        row = {"line": "The loose hinge", "strudel": 'note("d3").s("sine")'}
+        capture = "105.7 MHz FM: low and muffled, pulsing, audio level -10 dBFS"
+        self.assertIsNone(score.render(row, 0.25).cue)
+        self.assertEqual(score.render({**row, "cue": capture}, 0.25).cue, capture)
+        with patch.object(score, "generate", return_value=row):
+            self.assertEqual(score.Composer("local").compose("air", capture, 0.25).cue, capture)
+
+    def test_listen_command_prints_each_capture_in_order(self):
+        argv = ["radio.listen", "105.7", "88.1"]
+        output = io.StringIO()
+        with patch.object(sys, "argv", argv), redirect_stdout(output), \
+             patch.object(listen, "capture_hackrf", side_effect=["first cue", "second cue"]) as capture:
+            listen.main()
+        self.assertEqual(capture.call_args_list, [call(105.7), call(88.1)])
+        self.assertEqual(output.getvalue().splitlines(), ["first cue", "second cue"])
+
     def test_gate_and_speed_change_audio_in_each_supported_voice(self):
         spectra = []
         for synth in score.VOICES:
