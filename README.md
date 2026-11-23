@@ -12,7 +12,7 @@ On the Linux machine with GNU Radio, run these from the repository root. The bui
 /usr/bin/python3 perform.py --model pocket --theme "the last spoon in the kitchen"
 ```
 
-To send a new Qwen poem to the iPod, pick two local stations you can hear. This example listens to 105.7 and 88.1 MHz before starting the music and RadioText on 100.0 MHz. The local Ollama service must be running.
+To send a new Qwen poem to the iPod, run `./setup-ollama.sh` once, then pick two local stations you can hear. This example listens to 105.7 and 88.1 MHz before starting the music and RadioText on 100.0 MHz.
 
 ```sh
 /usr/bin/python3 perform.py --sample-mhz 105.7 88.1 --fm --tx-gain-db 40
@@ -30,10 +30,10 @@ For a local audio recording and the matching score transcript, run
 
 ## Use the pretrained language model
 
-The default backend calls Ollama at `127.0.0.1:11434` with a schema for the line and score. Install Ollama on the host and start its service (or run `ollama serve` in a separate terminal). Download the compact Qwen model once. Then the performance runs locally. [Ollama for Linux](https://docs.ollama.com/linux) · [Qwen2.5 1.5B model](https://ollama.com/library/qwen2.5:1.5b) · [Structured output API](https://docs.ollama.com/capabilities/structured-outputs)
+From the repository root on Linux, run the setup script below. It uses Ollama’s official installer when the CLI is missing and downloads the project’s Qwen model when needed. A fresh installation can prompt for sudo. The performer connects to `127.0.0.1:11434`. On a system without an Ollama service, run `ollama serve` in another terminal and rerun setup. [Ollama for Linux](https://docs.ollama.com/linux) · [Qwen2.5 1.5B model](https://ollama.com/library/qwen2.5:1.5b)
 
 ```sh
-ollama pull qwen2.5:1.5b
+./setup-ollama.sh
 /usr/bin/python3 perform.py --model qwen2.5:1.5b --theme "what the water heard" --fm --tx-gain-db 40
 ```
 

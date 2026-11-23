@@ -14,10 +14,10 @@ Open `build/featherweight/index.html`. **Play Strudel** runs the score in the br
 
 The test machine is a Lenovo ThinkPad T14s Gen 1 running Linux Mint 22.1, with a four-core i5-10310U, integrated Intel UHD graphics and 15 GiB of usable RAM. Start with `qwen2.5:1.5b` under Ollama on CPU. Its Q4_K_M download is 986 MB. The performer requests a 2,048-token context and three inference threads. This leaves CPU capacity for the audio path. The command prints wall time for each accepted line, including initial model loading on the first request. Compare those times with the ten-second reading interval before deciding how far ahead to compose. [Ollama model details](https://ollama.com/library/qwen2.5:1.5b)
 
-With Ollama installed and its local service running, these commands generate four new lines and their musical answers. Playback starts when you open the completed take. [Ollama Linux setup](https://docs.ollama.com/linux)
+Run these commands from the repository root to set up Ollama and generate four new lines and their musical answers. Playback starts when you open the completed take. [Ollama Linux setup](https://docs.ollama.com/linux)
 
 ```sh
-ollama pull qwen2.5:1.5b
+./setup-ollama.sh
 /usr/bin/python3 -m examples.featherweight --out build/featherweight-qwen
 ```
 
