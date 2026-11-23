@@ -10,6 +10,7 @@ from pathlib import Path
 from queue import Empty, Queue
 import signal
 import sys
+from textwrap import indent
 import threading
 from urllib.error import HTTPError
 
@@ -19,6 +20,7 @@ from gnuradio import audio, blocks, gr
 from radio.live_rds import DEFAULT_LINE_SECONDS
 from radio.live_tx import DEFAULT_FM_MHZ, Transmitter, hackrf_sink
 from score import Composer, RATE, render
+from sketch import save_sketch
 
 
 class Player(gr.sync_block):
@@ -78,7 +80,7 @@ def run(args, cue):
             cue_label = "Pre-broadcast radio sample"
         elif args.sample_mhz or args.rtl_mhz:
             cue_label = "Radio sample"
-        composer = Composer(args.model)
+        composer = Composer(args.model, args.sketch)
         upcoming = Queue(maxsize=1)
         next_phrase = upcoming.get_nowait
 
@@ -107,7 +109,9 @@ def run(args, cue):
             graph.rds.set_title(phrase.line)
         if phrase.cue:
             print(f"{cue_label}: {phrase.cue}", file=sys.stderr, flush=True)
-        print(f"{phrase.line}\n  {phrase.strudel}", flush=True)
+        if phrase.edited_layer is not None:
+            print(f"Edited sketch layer {phrase.edited_layer + 1}", file=sys.stderr, flush=True)
+        print(phrase.line, indent(phrase.strudel, "  "), sep="\n", flush=True)
         if not args.score and player.bars != 0:
             request_phrase.set()
 
@@ -148,6 +152,9 @@ def run(args, cue):
         waiter.join()
         if args.wav_out:
             sink.close()
+        if args.save_sketch and player.started:
+            # The composer can be one phrase ahead. Save the last audible revision.
+            save_sketch(args.save_sketch, player.current.strudel, args.line_seconds)
     if failure:
         raise failure[0]
 
@@ -160,8 +167,11 @@ def main():
     source.add_argument("--sample-mhz", type=float, nargs="+", metavar="MHZ",
                         help="rotate through FM stations on HackRF (capture all before FM transmission)")
     source.add_argument("--rtl-mhz", type=float, help="refresh FM cues continuously using an RTL-SDR")
+    parser.add_argument("--transcribe", action="store_true", help="use Whisper's English transcript as well as acoustic cues")
     parser.add_argument("--score", type=Path, help="play a saved JSONL score once")
     parser.add_argument("--loop-score", action="store_true", help="repeat the saved score")
+    parser.add_argument("--sketch", type=Path, help="start from a Strudel sketch and pick up hand edits between compositions")
+    parser.add_argument("--save-sketch", type=Path, help="write the last played sketch to this file on exit")
     output = parser.add_mutually_exclusive_group()
     output.add_argument("--fm", nargs="?", const=DEFAULT_FM_MHZ, type=float, metavar="MHZ",
                         help="transmit music and RDS using HackRF (default with --fm: %(const)s MHz)")
@@ -180,19 +190,31 @@ def main():
         parser.error("--bars requires a positive count and a speaker or WAV preview")
     if args.score and (args.rtl_mhz or args.sample_mhz):
         parser.error("air cues require model generation")
+    if args.transcribe and not (args.sample_mhz or args.rtl_mhz):
+        parser.error("--transcribe needs --sample-mhz or --rtl-mhz")
     if args.loop_score and not args.score:
         parser.error("--loop-score requires --score")
+    if args.score and args.sketch:
+        parser.error("--sketch requires live composition")
+    if args.save_sketch and args.save_sketch.resolve() in {
+        path.resolve() for path in (args.sketch, args.score, args.wav_out) if path
+    }:
+        parser.error("use a separate output file for --save-sketch")
     if not 0 <= args.tx_gain_db <= 47:
         parser.error("TX gain must be between 0 and 47 dB")
     signal.signal(signal.SIGTERM, signal.default_int_handler)
     try:
         with ExitStack() as stack:
+            recognizer = None
+            if args.transcribe:
+                from radio.transcription import Whisper
+                recognizer = Whisper()
             if args.rtl_mhz:
                 from radio.listen import rtl_cues
-                cue = stack.enter_context(rtl_cues(args.rtl_mhz))
+                cue = stack.enter_context(rtl_cues(args.rtl_mhz, recognizer))
             elif args.sample_mhz:
                 from radio.listen import station_cues
-                cue = station_cues(args.sample_mhz, before_tx=args.fm is not None)
+                cue = station_cues(args.sample_mhz, before_tx=args.fm is not None, recognizer=recognizer)
             else:
                 cue = lambda: "Room tone imagined from the theme"
             run(args, cue)

@@ -21,11 +21,13 @@ Run these commands from the repository root to set up Ollama and generate four n
 /usr/bin/python3 -m examples.featherweight --out build/featherweight-qwen
 ```
 
-To draw on the sound at the antenna, choose public FM stations you can receive. The HackRF visits them in order, taking a fresh two-second sample for each line. The player shows the corresponding cue as each phrase plays.
+To draw on the sound at the antenna, choose public FM stations you can receive. The HackRF visits them in order. With `--transcribe` it samples six seconds for each line and Whisper supplies the words it recognizes. The player shows the measurements and transcript as the corresponding three-layer sketch plays. Omit `--transcribe` for two-second acoustic cues.
 
 ```sh
-/usr/bin/python3 -m examples.featherweight --sample-mhz 105.7 88.1 --out build/featherweight-live
+/usr/bin/python3 -m examples.featherweight --sample-mhz 105.7 88.1 --transcribe --out build/featherweight-live
 ```
+
+To keep composing from the fourth line’s arrangement, pass `--sketch build/featherweight-live/last-set.strudel` to `perform.py`. The browser player links to that final sketch and to the full four-line score.
 
 To play those four lines once on the iPod, tune to 100.0 MHz and use the generated score. Add `--loop-score` to repeat the take.
 

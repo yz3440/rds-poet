@@ -1,0 +1,6 @@
+setcps(0.1)
+stack(
+  note("d2 ~ a2 c3").s("sine").clip(0.92).fast(2).gain(0.52),
+  note("d4 ~ a3 ~ ~ f4 ~").s("square").clip(0.18).fast(3).gain(0.18),
+  note("~ a4 c5 ~ e5").s("triangle").clip(0.7).fast(2).gain(0.38)
+)

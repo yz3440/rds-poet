@@ -4,6 +4,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Featherweight · RDS Poet</title>
 <style>
+  #cue { white-space: pre-line; }
   :root { color-scheme: dark; font-family: "DM Sans", sans-serif; background: #192222; color: #f7eed8; }
   body { margin: 0; min-height: 100vh; display: grid; place-items: center; }
   main { width: min(84vw, 42rem); padding: 3rem 0; }
@@ -25,7 +26,7 @@
     <button id="stop" disabled>Stop</button>
   </nav>
   <p id="status" role="status"></p>
-  <footer><span id="cue"></span><br><span id="credit"></span> · <a href="featherweight.strudel">Strudel score</a></footer>
+  <footer><span id="cue"></span><br><span id="credit"></span> · <a href="featherweight.strudel">Full score</a> · <a href="last-set.strudel">Final sketch</a></footer>
 </main>
 <script id="take" type="application/json">__TAKE_JSON__</script>
 <script>
@@ -68,7 +69,9 @@
         const context = window.getAudioContext();
         await context.resume();
         if (token !== session) return;
-        const music = take.bars.map(bar => window.note(bar.notes).s(bar.synth).clip(bar.clip).fast(bar.fast));
+        const music = take.bars.map(bar => window.stack(...bar.layers.map(layer =>
+          window.note(layer.notes).s(layer.synth).clip(layer.clip).fast(layer.fast).gain(layer.gain)
+        )));
         usingStrudel = true;
         await window.slowcat(...music).cpm(60 / take.seconds).play();
         if (token !== session) return;
@@ -96,10 +99,10 @@
   async function prepareStrudel() {
     try {
       await window.initStrudel();
-      for (let i = 0; i < 120 && !(window.note && window.slowcat && window.getAudioContext && window.hush); i++) {
+      for (let i = 0; i < 120 && !(window.note && window.stack && window.slowcat && window.getAudioContext && window.hush); i++) {
         await new Promise(resolve => setTimeout(resolve, 50));
       }
-      if (!(window.note && window.slowcat && window.getAudioContext && window.hush)) throw Error();
+      if (!(window.note && window.stack && window.slowcat && window.getAudioContext && window.hush)) throw Error();
       el("strudel").disabled = false;
     } catch {
       el("status").textContent = "Strudel could not load. The WAV preview works offline.";

@@ -85,13 +85,14 @@ class PocketPoet:
         return words
 
     def reply(self, theme, cue, history):
+        acoustic, _, words = cue.partition("\nWhisper transcript: ")
         reg = "midrange"
         for word, value in [("still", "quiet"), ("bright", "bright"), ("low", "low")]:
-            if word in cue.lower():
+            if word in acoustic.lower():
                 reg = value
                 break
-        pulse = "pulsing" if "pulsing" in cue else "steady"
-        anchors = set(re.findall(r"[a-z]{3,}", (theme + " " + " ".join(history[-1:])).lower()))
+        pulse = "pulsing" if "pulsing" in acoustic else "steady"
+        anchors = set(re.findall(r"[a-z]{3,}", " ".join([theme, words, *history[-1:]]).lower()))
         anchors -= {"the", "and", "with"}
         line = " ".join(self.sample(reg, pulse, "verse", 8, anchors))
         sound = self.sample(reg, pulse, "sound", 1, set())[0]

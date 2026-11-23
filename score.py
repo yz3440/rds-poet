@@ -1,6 +1,6 @@
 """Local model inference and the small Strudel vocabulary used on air."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import json
 import random
 import re
@@ -9,26 +9,17 @@ from urllib.request import Request, urlopen
 import numpy as np
 
 from radio.live_rds import validate_title
+from sketch import BARE_PATTERN, RATE, STARTER, SYNTHS, mix, parse_layers, stack_code
 
 
-RATE = 48_000
-TOKEN = r"(?:[a-g]#?[2-6]|~)"
-SYNTHS = "sine|triangle|square|sawtooth"
-NOTES = rf'{TOKEN}(?: {TOKEN}){{0,15}}'
-BARE_PATTERN = rf'note\("({NOTES})"\)\.s\("({SYNTHS})"\)'
-PATTERN = BARE_PATTERN + r'(?:\.clip\((0\.[1-9][0-9]?|1)\)\.fast\(([1-4])\))?'
 # Literal double quotes in a constrained string can make Ollama emit invalid JSON.
 # Request valid single-quoted Strudel, then use the saved score's double-quote style.
 MODEL_PATTERN = BARE_PATTERN.replace('"', "'")
-INSTRUCTIONS = """Compose one line of an ongoing radio poem and its musical answer.
-Write a short concrete image (2 to 8 words), in printable ASCII. Listen to the
-provided cue. Show a physical detail or action. Vary your opening words.
-Keep musical directions in the score.
-Echo the pulse or brightness without naming the station. Return line and strudel.
-Compose Strudel like note('d3 ~ a3 c4').s('triangle'). Each space divides the
-cycle into equal steps. Use 1-16 tokens: lowercase notes a-g in octaves 2-6,
-optional sharp, and ~ for a rest. Use the requested synth. Include a sounding
-note. Change rhythm, register or timbre in response to the poem and sound."""
+INSTRUCTIONS = """Write a brief, concrete image in printable ASCII and a pitched Strudel edit.
+Overheard speech is source material: transform one detail into a physical image in your own words.
+Let the station's pulse or brightness shape the music. Vary the selected motif in its own register.
+Use lowercase note names with octaves, ~ for a rest, and the requested synth.
+Return JSON with line and strudel."""
 
 
 @dataclass
@@ -37,6 +28,7 @@ class Phrase:
     strudel: str
     audio: np.ndarray
     cue: str | None = None
+    edited_layer: int | None = None
 
 
 def render(reply, seconds):
@@ -45,42 +37,19 @@ def render(reply, seconds):
         raise ValueError("Missing poem line")
     line = validate_title(reply["line"].strip())
     code = reply.get("strudel")
-    match = re.fullmatch(PATTERN, code) if isinstance(code, str) else None
-    if not match:
-        raise ValueError("Expected a supported note pattern, synth and optional clip/fast controls")
-    gate = float(match[3] or 1)
-    notes = match[1].split() * int(match[4] or 1)
-    if all(note == "~" for note in notes):
-        raise ValueError("The pattern needs at least one sounding note")
-    audio = np.zeros(round(RATE * seconds), np.float32)
-    pitches = {"c": 0, "d": 2, "e": 4, "f": 5, "g": 7, "a": 9, "b": 11}
-    for step, note in enumerate(notes):
-        if note == "~":
-            continue
-        midi = 12 * (int(note[-1]) + 1) + pitches[note[0]] + ("#" in note)
-        frequency = 440 * 2 ** ((midi - 69) / 12)
-        start = step * len(audio) // len(notes)
-        end = (step + 1) * len(audio) // len(notes)
-        end = start + round((end - start) * gate)
-        t = np.arange(end - start) / RATE
-        phase = 2 * np.pi * frequency * t
-        wave = np.sin(phase)
-        if match[2] == "triangle":
-            wave = 2 / np.pi * np.arcsin(wave)
-        elif match[2] in ("square", "sawtooth"):
-            # Limited harmonics leave headroom for the FM audio pre-emphasis.
-            stride = 2 if match[2] == "square" else 1
-            for harmonic in range(1 + stride, min(15, int(12_000 / frequency)) + 1, stride):
-                wave += np.sin(harmonic * phase) / harmonic
-            wave *= 0.65 if match[2] == "sawtooth" else 1
-        envelope = np.minimum(1, t / 0.008) * np.clip((len(t) / RATE - t) / 0.05, 0, 1)
-        audio[start:end] = 0.28 * envelope * wave
+    audio = mix(parse_layers(code), seconds)
     cue = reply.get("cue")
     return Phrase(line, code, audio, cue if isinstance(cue, str) else None)
 
 
-def generate(model, theme, cue, history, synth=None):
+def generate(model, theme, cue, history, synth=None, *, layers=None, target=None, step=0):
     pattern = MODEL_PATTERN if synth is None else MODEL_PATTERN.replace(SYNTHS, synth)
+    if layers is not None:
+        limit = min(3, len(layers[target].notes.split()))
+        pattern = pattern.replace("{0,15}", f"{{0,{limit - 1}}}")
+        octaves = [int(n[-1]) for n in layers[target].notes.split() if n != "~"]
+        if octaves:
+            pattern = pattern.replace("[2-6]", f"[{min(octaves)}-{max(octaves)}]")
     schema = {
         "type": "object",
         "properties": {
@@ -90,7 +59,14 @@ def generate(model, theme, cue, history, synth=None):
         "required": ["line", "strudel"],
         "additionalProperties": False,
     }
-    prompt = {"theme": theme, "air": cue, "synth": synth or "choose sine, triangle, sawtooth or square"}
+    acoustic, _, speech = cue.partition("\nWhisper transcript: ")
+    prompt = {"theme": theme, "air": acoustic, "synth": synth or "choose sine, triangle, sawtooth or square"}
+    if speech:
+        prompt["overheard_speech"] = speech
+    if layers is not None:
+        prompt.update(current_sketch=[layer.code() for layer in layers], edit_layer=target + 1,
+                      start_step=step + 1,
+                      task=f"Write a new 3-6 word image. Return up to {limit} replacement notes/rests from this step. Stay in the layer's register.")
     # A small model tends to recite whole lines when given its own transcript.
     # Occasionally carry one word across the cut while keeping the cue central.
     if history and random.randrange(3) == 0:
@@ -122,15 +98,6 @@ def generate(model, theme, cue, history, synth=None):
     return reply
 
 
-# Each voice gives the model a different musical and poetic gesture.
-VOICES = {
-    "sine": ("Follow a fading sound. Write widely spaced low notes.", (0.85, 0.95), (1,)),
-    "triangle": ("Zoom in on a small movement. Write a skipping melody.", (0.35, 0.5), (1, 2)),
-    "square": ("Listen for interruptions. Write high taps separated by rests.", (0.15, 0.25), (2, 3)),
-    "sawtooth": ("Find what is vibrating. Write a rising or falling bass figure.", (0.55, 0.7), (1, 2)),
-}
-
-
 def opening(line):
     words = re.findall(r"[a-z0-9']+", line.lower())
     return next((word for word in words if word not in
@@ -146,33 +113,80 @@ def image_words(line):
 
 
 class Composer:
-    def __init__(self, model):
+    def __init__(self, model, sketch=None):
         self.model = model
+        self.sketch = sketch
+        self.source_layers = parse_layers((sketch or STARTER).read_text(encoding="utf-8"))
+        self.layers = self.source_layers
+        self.cursors = [0] * len(self.layers)
+        self.edited = []
+        self.last_layer = None
         self.pocket = None
         if model == "pocket":
             from pocket import PocketPoet
             self.pocket = PocketPoet()
         self.history = []
-        self.voices = []
-        self.last_voice = None
+
+    def refresh_sketch(self):
+        """Merge hand-edited parts into the model's current arrangement."""
+        if self.sketch is None:
+            return set()
+        try:
+            new = parse_layers(self.sketch.read_text(encoding="utf-8"))
+        except OSError as exc:
+            raise ValueError(f"Cannot read sketch: {exc}") from exc
+        if len(new) != len(self.layers):
+            self.layers = self.source_layers = new
+            self.cursors = [0] * len(new)
+            self.edited.clear()
+            self.last_layer = None
+            return set()
+        changed = {i for i, layer in enumerate(new) if self.source_layers[i] != layer}
+        for i in changed:
+            self.cursors[i] = 0
+        self.layers = tuple(new[i] if i in changed else v for i, v in enumerate(self.layers))
+        self.source_layers = new
+        return changed
+
+    def next_layer(self, cue, hand_edits):
+        cue = cue.partition("\n")[0]
+        last = len(self.layers) - 1
+        if "pulsing" in cue:
+            preferred = min(1, last)
+        elif "bright and thin" in cue or "mostly radio hiss" in cue:
+            preferred = last
+        else:
+            preferred = 0
+        available = [i for i in range(len(self.layers)) if i not in self.edited]
+        if available and all(i in hand_edits for i in available) and len(hand_edits) < len(self.layers):
+            self.edited.clear()
+            available = list(range(len(self.layers)))
+        available = [i for i in available if i not in hand_edits] or available
+        if len(available) > 1 and self.last_layer in available:
+            available.remove(self.last_layer)
+        return preferred if preferred in available else available[0]
 
     def compose(self, theme, cue, seconds):
-        if not self.voices:
-            self.voices = random.sample(list(VOICES), len(VOICES))
-            if self.voices[-1] == self.last_voice:
-                self.voices[0], self.voices[-1] = self.voices[-1], self.voices[0]
-        synth = self.voices[-1]
-        direction, gates, speeds = VOICES[synth]
-        prompt = theme + " " + direction
+        target = self.next_layer(cue, self.refresh_sketch())
+        layer = self.layers[target]
+        step = self.cursors[target]
+        prompt = theme
         for attempt in range(3):
             try:
                 if self.pocket:
                     reply = self.pocket.reply(prompt, cue, self.history)
                 else:
-                    reply = generate(self.model, prompt, cue, self.history, synth)
+                    reply = generate(self.model, prompt, cue, self.history, layer.synth,
+                                     layers=self.layers, target=target, step=step)
                 if not isinstance(reply["line"], str):
                     raise ValueError("Missing poem line")
                 line = validate_title(reply["line"].strip())
+                _, _, speech = cue.partition("\nWhisper transcript: ")
+                words = re.findall(r"[a-z0-9']+", line.lower())
+                heard = re.findall(r"[a-z0-9']+", speech.lower())
+                if len(words) >= 4 and f" {' '.join(words)} " in f" {' '.join(heard)} ":
+                    prompt = theme + " Take one detail from the speaker and place it somewhere new. Use your own words."
+                    raise ValueError("Poem line quotes the transcript verbatim")
                 subject = opening(line)
                 # Let a motif echo once. Catch it again even if it has moved
                 # to the middle of a line or changed from singular to plural.
@@ -181,19 +195,32 @@ class Composer:
                                   for word in image_words(line))
                 if (not subject or line.casefold() in (old.casefold() for old in self.history)
                         or subject in (opening(old) for old in self.history[-8:]) or tired_image):
-                    prompt = f"{theme} {direction} Move to a new place. Begin with an action."
+                    prompt = f"{theme} Move to a new place. Begin with an action."
                     raise ValueError("repeated line or opening image")
                 match = re.fullmatch(BARE_PATTERN, reply["strudel"])
                 if not match:
-                    raise ValueError("unusable note pattern")
-                code = (f'note("{match[1]}").s("{synth}")'
-                        f'.clip({random.choice(gates)}).fast({random.choice(speeds)})')
-                phrase = render({"line": line, "strudel": code, "cue": cue}, seconds)
+                    raise ValueError("Invalid layer edit")
+                notes = layer.notes.split()
+                fragment = match[1].split()[:min(3, len(notes))]
+                for offset, note in enumerate(fragment):
+                    notes[(step + offset) % len(notes)] = note
+                updated = " ".join(notes)
+                if updated == layer.notes or all(n == "~" for n in notes):
+                    prompt = theme + " Change at least one note or rest in the selected layer."
+                    raise ValueError("Layer edit must change the motif and leave a sounding note")
+                layers = list(self.layers)
+                layers[target] = replace(layer, notes=updated)
+                phrase = Phrase(line, stack_code(layers), mix(layers, seconds), cue, target)
             except (ValueError, TypeError, KeyError) as exc:
                 if attempt == 2:
                     raise ValueError(f"No playable phrase after three replies: {exc}") from exc
             else:
                 self.history.append(line)
                 del self.history[:-32]
-                self.last_voice = self.voices.pop()
+                self.layers = tuple(layers)
+                self.cursors[target] = (step + len(fragment)) % len(notes)
+                self.last_layer = target
+                self.edited.append(target)
+                if len(self.edited) == len(self.layers):
+                    self.edited.clear()
                 return phrase

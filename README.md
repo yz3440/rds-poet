@@ -45,17 +45,33 @@ To see what the HackRF hears, sample each station once and print its frequency, 
 /usr/bin/python3 -m radio.listen 105.7 88.1
 ```
 
-With no receiver option, the live generator uses the theme and an imagined room tone. With `--sample-mhz` and speaker or WAV output, the HackRF takes a fresh two-second sample for each composition, visiting your stations in order. With FM output, it samples every selected frequency once before transmission, then alternates those stored observations as it writes new lines. The terminal prints the cue for each composition. [HackRF One half-duplex specifications](https://hackrf.readthedocs.io/en/latest/hackrf_one.html)
+With no receiver option, the live generator uses the theme and an imagined room tone. With `--sample-mhz` and speaker or WAV output, the HackRF normally takes a fresh two-second sample for each composition, visiting your stations in order. With FM output, it samples every selected frequency once before transmission, then alternates those stored observations as it writes new lines. The terminal prints the cue for each composition. [HackRF One half-duplex specifications](https://hackrf.readthedocs.io/en/latest/hackrf_one.html)
 
 ```sh
 /usr/bin/python3 perform.py --sample-mhz 105.7 88.1
 ```
 
-With a second device, an RTL-SDR tuned to the source station can keep supplying new observations while the HackRF transmits. Each model request gets the latest one-second audio window. This mode needs the `rtl_fm` utility. Both modes describe acoustic features such as brightness, level and pulse. They use these measurements as prompts. Speech transcription would be a separate input.
+With a second device, an RTL-SDR tuned to the source station can keep supplying new observations while the HackRF transmits. Each model request gets the latest one-second audio window. This mode needs the `rtl_fm` utility. Both modes describe acoustic features such as brightness, level and pulse. Qwen uses these measurements as a writing prompt. Add `--transcribe` to include any English words Whisper recognizes.
 
 ```sh
 /usr/bin/python3 perform.py --model qwen2.5:1.5b --rtl-mhz 99.5 --fm --tx-gain-db 40
 ```
+
+### Use spoken words from the radio
+
+Add `--transcribe` to take six seconds of FM audio per station, run the local English Whisper model and send its transcript and the acoustic cue to Qwen. To see what the recognizer heard before starting a performance, run:
+
+```sh
+/usr/bin/python3 -m radio.listen --transcribe 105.7 88.1
+```
+
+For a performance on the iPod with a ten-second reading interval:
+
+```sh
+/usr/bin/python3 perform.py --sample-mhz 105.7 88.1 --transcribe --fm 100.0 --tx-gain-db 40 --save-sketch last-set.strudel
+```
+
+With a single HackRF the performer captures and transcribes each station **before** switching to FM output, then reuses the observations in turn. For new words throughout the performance, use speaker output with the HackRF or use `--rtl-mhz MHZ --transcribe` with a second receiver during FM transmission. A speech preview on speakers may hold the current phrase while capture and inference finish. Whisper can mishear music and noisy speech. The terminal shows the recognizer’s words alongside the poem so you can compare them. Set `WHISPER_MODEL` to use an English Whisper model installed outside the location below.
 
 ### Install whisper.cpp for offline transcription
 
@@ -71,14 +87,25 @@ install -m 755 build/bin/whisper-cli ~/.local/bin/whisper-cli
 sh models/download-ggml-model.sh tiny.en
 ```
 
-Transcribe the included speech sample with the command below. To use your own recording, replace the path after `-f` with a 16 kHz mono PCM WAV file. The live performer currently uses the acoustic cues described above.
+Transcribe the included speech sample with the command below. To use your own recording, replace the path after `-f` with a 16 kHz mono PCM WAV file.
 
 ```sh
 ~/.local/bin/whisper-cli -m ~/Developer/whisper.cpp/models/ggml-tiny.en.bin -f ~/Developer/whisper.cpp/samples/jfk.wav -t 3
 ```
 
-## Score and runtime
+## Edit a Strudel sketch as it plays
 
-Each phrase pairs up to 64 printable ASCII characters with playable Strudel, for example `note("d3 ~ a3 c4").s("triangle").clip(0.35).fast(2)`. The model writes the pitches and rests. The performer shuffles four voices across successive lines, giving sine notes room to ring, clipping square notes into taps, and varying the articulation and speed of the triangle and sawtooth figures. The speaker, WAV and FM paths synthesize the printed score in Python at 48 kHz. You can play the same expression in Strudel with the printed `setcps(...)` tempo. [Strudel synthesizers](https://strudel.cc/learn/synths/) · [Strudel timing controls](https://strudel.cc/learn/time-modifiers/)
+By default, the [starter sketch](examples/airwaves.strudel) plays three parts together. A four-step bass anchors a seven-step pulse and a five-step melody. Qwen sees the current sketch and replaces up to three notes or rests in one layer per accepted poem line. The edit position advances through each motif, preserving its length and rhythm grid. The other parts carry through the change. A pulsing station cue favors the second layer, a bright steady cue favors the highest-index layer, and a low steady cue favors the first. Each layer gets a turn. [Strudel’s stack function](https://strudel.cc/learn/factories/#stack)
+
+To hand-edit alongside Qwen, copy the starter once, then run the performer with your working file:
+
+```sh
+cp -n examples/airwaves.strudel my-sketch.strudel
+/usr/bin/python3 perform.py --sketch my-sketch.strudel --sample-mhz 105.7 88.1 --transcribe --save-sketch last-set.strudel
+```
+
+Edit and save a layer in `my-sketch.strudel` during the set. At the next composition the performer merges the changed layer with the other evolving parts. Adding or removing layers loads the new arrangement. Ctrl+C saves the last played version to `last-set.strudel`. Use that file as the next `--sketch` to continue the piece.
+
+The FM and WAV renderer supports a single pitched pattern or a flat `stack(...)` of up to eight. Each layer takes 1–16 space-separated notes or rests (`~`), a sine, triangle, square or sawtooth synth, and optional `.clip(0–1)`, `.fast(1–4)` and `.gain(0–1)` in that order. The performer sets the cycle duration with `--line-seconds` (default 10). The exported source also plays in Strudel. [Strudel synthesizers](https://strudel.cc/learn/synths/) · [Strudel timing controls](https://strudel.cc/learn/time-modifiers/)
 
 The performance requires Python 3, NumPy and GNU Radio 3.10. The FM output also uses gr-osmosdr with HackRF support and the HackRF tools. Radio input additionally uses SciPy. A saved score plays once. Add `--loop-score` for a repeating rehearsal, for example `/usr/bin/python3 perform.py --score examples/rehearsal.jsonl --loop-score`. For the original manual-title and MP3 transmitter commands, see the [radio guide](radio/README.md).
