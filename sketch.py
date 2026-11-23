@@ -27,6 +27,10 @@ class Layer:
     fast: int
     gain: float
 
+    @property
+    def audible(self):
+        return self.gain > 0 and self.clip > 0 and any(note != "~" for note in self.notes.split())
+
     def code(self):
         return (f'note("{self.notes}").s("{self.synth}")'
                 f'.clip({self.clip}).fast({self.fast}).gain({self.gain})')
@@ -54,7 +58,7 @@ def parse_layers(source):
         if not (0 <= layer.clip <= 1 and 0 <= layer.gain <= 1):
             raise ValueError("Layer clip and gain must be between 0 and 1")
         layers.append(layer)
-    if not any(layer.notes.replace("~", "").strip() and layer.gain and layer.clip for layer in layers):
+    if not any(layer.audible for layer in layers):
         raise ValueError("The sketch needs at least one sounding note")
     return tuple(layers)
 

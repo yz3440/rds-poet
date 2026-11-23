@@ -8,6 +8,7 @@ from urllib.request import Request, urlopen
 
 import numpy as np
 
+from arrangement import arrange, choose_section, edit_motif
 from radio.live_rds import validate_title
 from sketch import BARE_PATTERN, RATE, STARTER, SYNTHS, mix, parse_layers, stack_code
 
@@ -17,7 +18,7 @@ from sketch import BARE_PATTERN, RATE, STARTER, SYNTHS, mix, parse_layers, stack
 MODEL_PATTERN = BARE_PATTERN.replace('"', "'")
 INSTRUCTIONS = """Write a brief, concrete image in printable ASCII and a pitched Strudel edit.
 Overheard speech is source material: transform one detail into a physical image in your own words.
-Let the station's pulse or brightness shape the music. Vary the selected motif in its own register.
+Let the station's pulse or brightness shape the music. Use the requested register and rhythm.
 Use lowercase note names with octaves, ~ for a rest, and the requested synth.
 Return JSON with line and strudel."""
 
@@ -29,6 +30,8 @@ class Phrase:
     audio: np.ndarray
     cue: str | None = None
     edited_layer: int | None = None
+    section_name: str | None = None
+    answer_layer: int | None = None
 
 
 def render(reply, seconds):
@@ -42,9 +45,13 @@ def render(reply, seconds):
     return Phrase(line, code, audio, cue if isinstance(cue, str) else None)
 
 
-def generate(model, theme, cue, history, synth=None, *, layers=None, target=None, step=0):
+def generate(model, theme, cue, history, synth=None, *, layers=None, target=None, step=0, section=None):
     pattern = MODEL_PATTERN if synth is None else MODEL_PATTERN.replace(SYNTHS, synth)
-    if layers is not None:
+    if section is not None:
+        minimum, maximum = section.steps
+        pattern = pattern.replace("{0,15}", f"{{{minimum - 1},{maximum - 1}}}")
+        pattern = pattern.replace("[2-6]", f"[{section.octave}-{section.octave + 1}]")
+    elif layers is not None:
         limit = min(3, len(layers[target].notes.split()))
         pattern = pattern.replace("{0,15}", f"{{0,{limit - 1}}}")
         octaves = [int(n[-1]) for n in layers[target].notes.split() if n != "~"]
@@ -64,9 +71,13 @@ def generate(model, theme, cue, history, synth=None, *, layers=None, target=None
     if speech:
         prompt["overheard_speech"] = speech
     if layers is not None:
-        prompt.update(current_sketch=[layer.code() for layer in layers], edit_layer=target + 1,
-                      start_step=step + 1,
-                      task=f"Write a new 3-6 word image. Return up to {limit} replacement notes/rests from this step. Stay in the layer's register.")
+        prompt.update(current_sketch=[layer.code() for layer in layers], edit_layer=target + 1)
+        if section is None:
+            prompt.update(start_step=step + 1, task=f"Write a new 3-6 word image. Return up to {limit} replacement notes/rests from this step. Stay in the layer's register.")
+        else:
+            prompt["task"] = (f"Write a new 3-6 word image and a complete {minimum}-{maximum} step motif "
+                              f"for {section.name}, octaves {section.octave}-{section.octave + 1}. "
+                              "Echo one pitch from the existing sketch. Include sounding notes.")
     # A small model tends to recite whole lines when given its own transcript.
     # Occasionally carry one word across the cut while keeping the cue central.
     if history and random.randrange(3) == 0:
@@ -113,7 +124,12 @@ def image_words(line):
 
 
 class Composer:
-    def __init__(self, model, sketch=None):
+    def __init__(self, model, sketch=None, edit_size="bold"):
+        if edit_size not in ("bold", "subtle"):
+            raise ValueError("Choose bold or subtle sketch edits")
+        self.edit_size = edit_size
+        self.last_section = None
+        self.used_sections = set()
         self.model = model
         self.sketch = sketch
         self.source_layers = parse_layers((sketch or STARTER).read_text(encoding="utf-8"))
@@ -157,18 +173,21 @@ class Composer:
             preferred = last
         else:
             preferred = 0
-        available = [i for i in range(len(self.layers)) if i not in self.edited]
-        if available and all(i in hand_edits for i in available) and len(hand_edits) < len(self.layers):
+        eligible = [i for i, layer in enumerate(self.layers) if self.edit_size == "subtle" or layer.audible]
+        available = [i for i in eligible if i not in self.edited]
+        if not available or (all(i in hand_edits for i in available) and any(i not in hand_edits for i in eligible)):
             self.edited.clear()
-            available = list(range(len(self.layers)))
+            available = eligible
         available = [i for i in available if i not in hand_edits] or available
         if len(available) > 1 and self.last_layer in available:
             available.remove(self.last_layer)
         return preferred if preferred in available else available[0]
 
     def compose(self, theme, cue, seconds):
-        target = self.next_layer(cue, self.refresh_sketch())
+        hand_edits = self.refresh_sketch()
+        target = self.next_layer(cue, hand_edits)
         layer = self.layers[target]
+        section = choose_section(cue, self.last_section, self.used_sections) if self.edit_size == "bold" else None
         step = self.cursors[target]
         prompt = theme
         for attempt in range(3):
@@ -176,8 +195,8 @@ class Composer:
                 if self.pocket:
                     reply = self.pocket.reply(prompt, cue, self.history)
                 else:
-                    reply = generate(self.model, prompt, cue, self.history, layer.synth,
-                                     layers=self.layers, target=target, step=step)
+                    reply = generate(self.model, prompt, cue, self.history, section.synth if section else layer.synth,
+                                     layers=self.layers, target=target, step=step, section=section)
                 if not isinstance(reply["line"], str):
                     raise ValueError("Missing poem line")
                 line = validate_title(reply["line"].strip())
@@ -200,17 +219,17 @@ class Composer:
                 match = re.fullmatch(BARE_PATTERN, reply["strudel"])
                 if not match:
                     raise ValueError("Invalid layer edit")
-                notes = layer.notes.split()
-                fragment = match[1].split()[:min(3, len(notes))]
-                for offset, note in enumerate(fragment):
-                    notes[(step + offset) % len(notes)] = note
-                updated = " ".join(notes)
-                if updated == layer.notes or all(n == "~" for n in notes):
+                fragment = match[1].split()
+                answer = None
+                if section:
+                    layers, answer = arrange(self.layers, target, hand_edits, fragment, section)
+                else:
                     prompt = theme + " Change at least one note or rest in the selected layer."
-                    raise ValueError("Layer edit must change the motif and leave a sounding note")
-                layers = list(self.layers)
-                layers[target] = replace(layer, notes=updated)
-                phrase = Phrase(line, stack_code(layers), mix(layers, seconds), cue, target)
+                    updated, next_step = edit_motif(layer, step, fragment)
+                    layers = list(self.layers)
+                    layers[target] = replace(layer, notes=updated)
+                phrase = Phrase(line, stack_code(layers), mix(layers, seconds), cue, target,
+                                section_name=section.name if section else None, answer_layer=answer)
             except (ValueError, TypeError, KeyError) as exc:
                 if attempt == 2:
                     raise ValueError(f"No playable phrase after three replies: {exc}") from exc
@@ -218,7 +237,13 @@ class Composer:
                 self.history.append(line)
                 del self.history[:-32]
                 self.layers = tuple(layers)
-                self.cursors[target] = (step + len(fragment)) % len(notes)
+                if section:
+                    self.last_section = section
+                    self.used_sections.add(section)
+                    if len(self.used_sections) == 4:
+                        self.used_sections.clear()
+                else:
+                    self.cursors[target] = next_step
                 self.last_layer = target
                 self.edited.append(target)
                 if len(self.edited) == len(self.layers):

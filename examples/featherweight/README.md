@@ -29,6 +29,8 @@ To draw on the sound at the antenna, choose public FM stations you can receive. 
 
 To keep composing from the fourth line’s arrangement, pass `--sketch build/featherweight-live/last-set.strudel` to `perform.py`. The browser player links to that final sketch and to the full four-line score.
 
+Generated takes use a new musical section for each line. Add `--edit-size subtle` to hear smaller note edits within the existing arrangement.
+
 To play those four lines once on the iPod, tune to 100.0 MHz and use the generated score. Add `--loop-score` to repeat the take.
 
 ```sh

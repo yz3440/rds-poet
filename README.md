@@ -95,7 +95,9 @@ Transcribe the included speech sample with the command below. To use your own re
 
 ## Edit a Strudel sketch as it plays
 
-By default, the [starter sketch](examples/airwaves.strudel) plays three parts together. A four-step bass anchors a seven-step pulse and a five-step melody. Qwen sees the current sketch and replaces up to three notes or rests in one layer per accepted poem line. The edit position advances through each motif, preserving its length and rhythm grid. The other parts carry through the change. A pulsing station cue favors the second layer, a bright steady cue favors the highest-index layer, and a low steady cue favors the first. Each layer gets a turn. [Strudel’s stack function](https://strudel.cc/learn/factories/#stack)
+The [starter sketch](examples/airwaves.strudel) opens with a bass, a seven-step pulse and a melody. With the default `--edit-size bold`, each new poem line starts a different musical section. Qwen writes a complete lead motif for the current sketch. Two or three sustained bass notes can give way to a clipped square-wave figure repeating four times in the same ten seconds. Brightness and pulse help select the lead. Open and busy sections alternate, including when the station cue repeats.
+
+With three sounding layers, a second voice answers using pitches from its previous motif and a third carries straight through the transition. With one or two sounding layers, only the lead is rewritten. For gradual evolution, use `--edit-size subtle` to change up to three notes or rests in one layer, preserving the instrument and rhythm grid. Both modes apply to live shows and generated Featherweight takes. [Strudel’s stack function](https://strudel.cc/learn/factories/#stack)
 
 To hand-edit alongside Qwen, copy the starter once, then run the performer with your working file:
 

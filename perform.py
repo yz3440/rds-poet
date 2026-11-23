@@ -80,7 +80,7 @@ def run(args, cue):
             cue_label = "Pre-broadcast radio sample"
         elif args.sample_mhz or args.rtl_mhz:
             cue_label = "Radio sample"
-        composer = Composer(args.model, args.sketch)
+        composer = Composer(args.model, args.sketch, args.edit_size)
         upcoming = Queue(maxsize=1)
         next_phrase = upcoming.get_nowait
 
@@ -109,7 +109,12 @@ def run(args, cue):
             graph.rds.set_title(phrase.line)
         if phrase.cue:
             print(f"{cue_label}: {phrase.cue}", file=sys.stderr, flush=True)
-        if phrase.edited_layer is not None:
+        if phrase.section_name:
+            change = f"{phrase.section_name.capitalize()} on layer {phrase.edited_layer + 1}"
+            if phrase.answer_layer is not None:
+                change += f", answered by layer {phrase.answer_layer + 1}"
+            print(change, file=sys.stderr, flush=True)
+        elif phrase.edited_layer is not None:
             print(f"Edited sketch layer {phrase.edited_layer + 1}", file=sys.stderr, flush=True)
         print(phrase.line, indent(phrase.strudel, "  "), sep="\n", flush=True)
         if not args.score and player.bars != 0:
@@ -171,6 +176,8 @@ def main():
     parser.add_argument("--score", type=Path, help="play a saved JSONL score once")
     parser.add_argument("--loop-score", action="store_true", help="repeat the saved score")
     parser.add_argument("--sketch", type=Path, help="start from a Strudel sketch and pick up hand edits between compositions")
+    parser.add_argument("--edit-size", choices=("bold", "subtle"), default="bold",
+                        help="rearrange the ensemble or change up to three notes (default: %(default)s)")
     parser.add_argument("--save-sketch", type=Path, help="write the last played sketch to this file on exit")
     output = parser.add_mutually_exclusive_group()
     output.add_argument("--fm", nargs="?", const=DEFAULT_FM_MHZ, type=float, metavar="MHZ",

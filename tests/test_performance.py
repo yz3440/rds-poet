@@ -79,9 +79,9 @@ class PerformanceTest(unittest.TestCase):
     def test_composer_changes_voices_and_rejects_returning_images(self):
         lines = iter(["The dandelion", "A DANDELION opens!", "Oars touch water", "Glass sings",
                       "Who opened the gate?", "Ash collects", "Ink lifts", "Rain", "Brass", "Silk"])
-        composer = score.Composer("local")
+        composer = score.Composer("local", edit_size="subtle")
         calls = []
-        def reply(model, theme, cue, history, synth, *, layers, target, step):
+        def reply(model, theme, cue, history, synth, *, layers, target, step, section):
             calls.append(layers)
             notes = "d3" if layers[target].notes.split()[step] != "d3" else "a4"
             return {"line": next(lines), "strudel": f'note("{notes}").s("{synth}")'}
@@ -109,6 +109,58 @@ class PerformanceTest(unittest.TestCase):
             result = [composer.compose("air", "steady", 0.25).line for _ in range(3)]
         self.assertEqual(result, [lines[0], lines[1], lines[3]])
 
+    def test_default_sections_change_rhythm_register_and_instrument_on_repeated_cue(self):
+        composer = score.Composer("local")
+        previous = composer.layers
+        lines = iter(["Tin", "Ash", "Oars", "Ink"])
+        def reply(model, theme, cue, history, synth, *, layers, target, step, section):
+            return {"line": next(lines), "strudel": f'note("d4 a4 ~ g4 d4 f4").s("{synth}")'}
+        sections = set()
+        attacks = []
+        with patch.object(score, "generate", side_effect=reply):
+            for _ in range(4):
+                phrase = composer.compose("port", "88.1 MHz FM: midrange, steady", 0.5)
+                layers = sketch.parse_layers(phrase.strudel)
+                lead = layers[phrase.edited_layer]
+                changed = {i for i in range(3) if layers[i] != previous[i]}
+                self.assertEqual(changed, {phrase.edited_layer, phrase.answer_layer})
+                sections.add(phrase.section_name)
+                attacks.append(lead.fast * sum(n != "~" for n in lead.notes.split()))
+                np.testing.assert_array_equal(sketch.mix(layers, 0.5), phrase.audio)
+                previous = layers
+        self.assertEqual(len(sections), 4)
+        self.assertLessEqual(max(attacks[::2]), 4)
+        self.assertGreaterEqual(min(attacks[1::2]), 9)
+
+    def test_bold_preserves_muted_and_hand_edited_parts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "working.strudel"
+            source = sketch.STARTER.read_text().replace(".gain(0.52)", ".gain(0)")
+            path.write_text(source)
+            composer = score.Composer("local", path)
+            source = source.replace("~ a4 c5 ~ e5", "g4 ~ a5")
+            path.write_text(source)
+            before = sketch.parse_layers(source)
+            with patch.object(score, "generate", return_value={"line": "Rail", "strudel": 'note("g3").s("sine")'}):
+                phrase = composer.compose("air", "bright and thin", 0.25)
+            self.assertEqual(phrase.edited_layer, 1)
+            self.assertIsNone(phrase.answer_layer)
+            self.assertEqual(composer.layers[0], before[0])
+            self.assertEqual(composer.layers[2], before[2])
+
+    def test_bold_uses_complete_motif_in_ollama_schema(self):
+        composer = score.Composer("local")
+        payload = json.dumps({"line": "Glass arc", "strudel": "note('g4 ~ d5').s('triangle')"})
+        stream = io.BytesIO(json.dumps({"message": {"content": payload}}).encode())
+        with patch.object(score, "urlopen", return_value=stream) as post:
+            phrase = composer.compose("port", "88.1 MHz FM: bright and thin, steady", 0.25)
+        body = json.loads(post.call_args.args[0].data)
+        pattern = body["format"]["properties"]["strudel"]["pattern"]
+        self.assertRegex("note('g4 ~ d5').s('triangle')", pattern)
+        self.assertNotRegex("note('d2').s('triangle')", pattern)
+        self.assertIn("complete", json.loads(body["messages"][-1]["content"])["task"])
+        self.assertEqual(phrase.section_name, "spaced bells")
+
     def test_live_and_saved_phrases_keep_their_own_cue(self):
         row = {"line": "The loose hinge", "strudel": 'note("d3").s("sine")'}
         capture = "105.7 MHz FM: low and muffled, pulsing, audio level -10 dBFS"
@@ -121,7 +173,7 @@ class PerformanceTest(unittest.TestCase):
         reply = json.dumps({"line": "River in the window", "strudel": "note('g4').s('triangle')"})
         stream = io.BytesIO(json.dumps({"message": {"content": reply}}).encode())
         cue = speech_cue("88.1 MHz FM: bright and thin, steady", np.ones(100), lambda audio: "river ferry")
-        composer = score.Composer("local")
+        composer = score.Composer("local", edit_size="subtle")
         layers = composer.layers
         with patch.object(score, "urlopen", return_value=stream) as post:
             phrase = composer.compose("port", cue, 0.25)
@@ -138,7 +190,7 @@ class PerformanceTest(unittest.TestCase):
             source = Path(directory) / "set.strudel"
             seed = sketch.STARTER.read_text()
             source.write_text(seed)
-            composer = score.Composer("local", source)
+            composer = score.Composer("local", source, edit_size="subtle")
             replies = [{"line": "Turning", "strudel": 'note("a2 ~").s("sine")'},
                        {"line": "Reeds", "strudel": 'note("e5 c5").s("triangle")'}]
             with patch.object(score, "generate", side_effect=replies):

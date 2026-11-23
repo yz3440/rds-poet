@@ -29,8 +29,8 @@ LINE_PROMPTS = (
 )
 
 
-def compose(model, next_cue, sketch=None):
-    composer = Composer(model, sketch)
+def compose(model, next_cue, sketch=None, edit_size="bold"):
+    composer = Composer(model, sketch, edit_size)
     phrases = []
     cues = []
     for index, instruction in enumerate(LINE_PROMPTS):
@@ -79,6 +79,8 @@ def main():
                         help="take a fresh HackRF sample per line, rotating through these stations")
     inputs.add_argument("--reference", action="store_true", help="render the included Codex-written session")
     parser.add_argument("--sketch", type=Path, help="start from this pitched Strudel sketch")
+    parser.add_argument("--edit-size", choices=("bold", "subtle"), default="bold",
+                        help="size of each generated sketch edit (default: %(default)s)")
     parser.add_argument("--transcribe", action="store_true", help="include spoken English from FM samples")
     parser.add_argument("--out", type=Path, default=Path("build/featherweight"))
     args = parser.parse_args()
@@ -99,7 +101,7 @@ def main():
                     parser.error("--sample-mhz must be between 87.5 and 108")
                 from radio.listen import Whisper, station_cues
                 next_cue = station_cues(args.sample_mhz, recognizer=Whisper() if args.transcribe else None)
-            phrases, cues = compose(args.model, next_cue, args.sketch)
+            phrases, cues = compose(args.model, next_cue, args.sketch, args.edit_size)
             credit = f"Local model · {args.model}"
         save_take(args.out, phrases, cues, credit)
     except HTTPError as exc:
