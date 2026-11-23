@@ -24,6 +24,20 @@ comparison, add `--tx-gain-db 14` and keep the iPod and headphone cord in
 the same position. The startup line reports the configured gain.
 [HackRF TX gain controls](https://hackrf.readthedocs.io/en/latest/setting_gain.html)
 
+### Rotate lyrics
+
+To loop the three original sample lines at two seconds per line, run
+
+```sh
+/usr/bin/python3 live_tx.py --freq-mhz 87.5 --tx-gain-db 14 --lyrics assets/rotation-demo.txt --line-seconds 2
+```
+
+Pass your own text file to `--lyrics`, one line per display update, up to
+64 printable ASCII characters each. Blank lines are skipped. Two seconds is
+the default. Use e.g. `--line-seconds 5` to give the receiver more time.
+Rotation uses a fixed interval and repeats until Ctrl+C. Add `--wav` to
+loop audio alongside the text. For manual entry, omit both rotation options.
+
 ### If the iPod nano is silent
 
 On the fifth-generation nano, plug wired headphones into the headphone jack,

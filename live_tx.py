@@ -2,10 +2,13 @@
 """Headless HackRF FM transmitter with line-by-line song title updates."""
 
 import argparse
+from itertools import cycle
 import math
+from pathlib import Path
 import signal
 import subprocess
 import sys
+import time
 
 from gnuradio import analog, blocks, filter, gr
 from gnuradio.filter import firdes
@@ -93,10 +96,29 @@ def hackrf_sink(freq_hz, tx_gain_db=8):
     return sink
 
 
+def load_lyrics(path):
+    lines = []
+    for number, raw in enumerate(path.read_text(encoding="utf-8-sig").splitlines(), 1):
+        line = raw.strip()
+        if line:
+            try:
+                lines.append(validate_title(line))
+            except ValueError as exc:
+                raise ValueError(f"{path}, line {number}: {exc}") from exc
+    if not lines:
+        raise ValueError(f"{path} contains no lyric lines")
+    return lines
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--freq-mhz", type=float, default=87.5)
-    parser.add_argument("--title", type=validate_title, default="RDS Poet")
+    text_source = parser.add_mutually_exclusive_group()
+    text_source.add_argument("--title", type=validate_title, default="RDS Poet")
+    text_source.add_argument("--lyrics", type=Path, metavar="FILE",
+                             help="rotate RadioText through a file, one line at a time")
+    parser.add_argument("--line-seconds", type=float, metavar="SECONDS",
+                        help="time per line with --lyrics (default: 2)")
     parser.add_argument("--wav", help="loop a mono or stereo WAV (default: 440 Hz tone)")
     parser.add_argument("--tx-gain-db", type=int, default=8, metavar="DB",
                         help="HackRF TX VGA gain, 0 to 47 dB (default: 8)")
@@ -105,8 +127,19 @@ def main():
         parser.error("--tx-gain-db must be an integer from 0 to 47")
     if not math.isfinite(args.freq_mhz) or not 1 <= args.freq_mhz <= 6000:
         parser.error("Use a HackRF frequency between 1 and 6000 MHz")
+    if args.line_seconds is not None:
+        if args.lyrics is None:
+            parser.error("--line-seconds requires --lyrics")
+        if not math.isfinite(args.line_seconds) or args.line_seconds <= 0:
+            parser.error("--line-seconds must be finite and positive")
+    interval = args.line_seconds if args.line_seconds is not None else 2.0
     try:
-        graph = Transmitter(hackrf_sink(args.freq_mhz * 1e6, args.tx_gain_db), args.title, args.wav)
+        lines = load_lyrics(args.lyrics) if args.lyrics else []
+    except (OSError, ValueError) as exc:
+        parser.error(str(exc))
+    initial_title = lines[0] if lines else args.title
+    try:
+        graph = Transmitter(hackrf_sink(args.freq_mhz * 1e6, args.tx_gain_db), initial_title, args.wav)
         graph.start()
     except (RuntimeError, ValueError, OSError) as exc:
         parser.exit(1, f"Could not start transmitter: {exc}\n")
@@ -116,7 +149,14 @@ def main():
 
     signal.signal(signal.SIGTERM, stop)
     try:
-        print(f"Running at {args.freq_mhz:g} MHz with {args.tx_gain_db} dB TX gain. Type a title and press Enter. Ctrl+C stops.", flush=True)
+        print(f"Running at {args.freq_mhz:g} MHz with {args.tx_gain_db} dB TX gain. Ctrl+C stops.", flush=True)
+        if lines:
+            print(f"Rotating RadioText every {interval:g} seconds.", flush=True)
+            for line in cycle(lines):
+                graph.rds.set_title(line)
+                print(f"Queued RadioText: {line}", flush=True)
+                time.sleep(interval)
+        print("Type a title and press Enter.", flush=True)
         for line in sys.stdin:
             title = line.rstrip("\r\n")
             try:
