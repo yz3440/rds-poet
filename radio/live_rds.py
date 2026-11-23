@@ -4,6 +4,9 @@ import numpy as np
 from gnuradio import gr
 
 
+DEFAULT_LINE_SECONDS = 10
+
+
 def validate_title(title):
     if not (1 <= len(title) <= 64 and title.strip() and title.isascii() and title.isprintable()):
         raise ValueError("Use 1 to 64 printable ASCII characters for the title")

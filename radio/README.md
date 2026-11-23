@@ -26,12 +26,12 @@ the same position. The startup line reports the configured gain.
 
 ### Play the local MP3 with less receiver hiss
 
-Loop the bundled song with two-second RadioText rotation:
+Loop the bundled song with ten seconds per RadioText line.
 
 ```sh
 /usr/bin/python3 -m radio.live_tx --freq-mhz 87.5 --tx-gain-db 40 --mono \
   --audio-file assets/never-gonna-give-you-up.mp3 \
-  --lyrics assets/rotation-demo.txt --line-seconds 2
+  --lyrics assets/rotation-demo.txt --line-seconds 10
 ```
 
 `--mono` omits the 19 kHz stereo pilot while carrying the music and 57 kHz
@@ -42,15 +42,15 @@ an alias for `--audio-file`.
 
 ### Rotate lyrics
 
-To loop the three original sample lines at two seconds per line, run
+To loop the three original sample lines at ten seconds per line, run
 
 ```sh
-/usr/bin/python3 -m radio.live_tx --freq-mhz 87.5 --tx-gain-db 14 --lyrics assets/rotation-demo.txt --line-seconds 2
+/usr/bin/python3 -m radio.live_tx --freq-mhz 87.5 --tx-gain-db 14 --lyrics assets/rotation-demo.txt --line-seconds 10
 ```
 
 Pass your own text file to `--lyrics`, one line per display update, up to
-64 printable ASCII characters each. Blank lines are skipped. Two seconds is
-the default. Use e.g. `--line-seconds 5` to give the receiver more time.
+64 printable ASCII characters each. Blank lines are skipped. Ten seconds is
+the default. Use `--line-seconds 2` for a faster rotation.
 Rotation uses a fixed interval and repeats until Ctrl+C. Add `--wav` to
 loop audio alongside the text. For manual entry, omit both rotation options.
 

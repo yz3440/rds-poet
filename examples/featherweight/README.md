@@ -1,8 +1,8 @@
 # Featherweight
 
-A four-line radio poem. A feather falls, a scale rocks and a needle rises. Each movement gets a two-second Strudel phrase. The source for the included reference take is the MDR JUMP song title in redsea’s published example of a decoded FM RadioText group. Codex wrote the reference lines and patterns in response to the title. [Source RadioText](https://github.com/windytan/redsea#readme)
+A four-line radio poem. A feather falls, a scale rocks and a needle rises. Each movement gets a ten-second Strudel phrase. The source for the included reference take is the MDR JUMP song title in redsea’s published example of a decoded FM RadioText group. Codex wrote the reference lines and patterns in response to the title. [Source RadioText](https://github.com/windytan/redsea#readme)
 
-Run from the RDS Poet repository root with the system Python used for GNU Radio. This builds an eight-second read-along without a model download.
+Run from the RDS Poet repository root with the system Python used for GNU Radio. This builds a 40-second read-along without a model download.
 
 ```sh
 /usr/bin/python3 -m examples.featherweight --reference
@@ -12,7 +12,7 @@ Open `build/featherweight/index.html`. **Play Strudel** runs the score in the br
 
 ## Make a fresh take on the ThinkPad
 
-The test machine is a Lenovo ThinkPad T14s Gen 1 running Linux Mint 22.1, with a four-core i5-10310U, integrated Intel UHD graphics and 15 GiB of usable RAM. Start with `qwen2.5:1.5b` under Ollama on CPU. Its Q4_K_M download is 986 MB. The performer requests a 2,048-token context and three inference threads. This leaves CPU capacity for the audio path. The command prints wall time for each accepted line, including initial model loading on the first request. Compare those times with the two-second reading interval before deciding how far ahead to compose. [Ollama model details](https://ollama.com/library/qwen2.5:1.5b)
+The test machine is a Lenovo ThinkPad T14s Gen 1 running Linux Mint 22.1, with a four-core i5-10310U, integrated Intel UHD graphics and 15 GiB of usable RAM. Start with `qwen2.5:1.5b` under Ollama on CPU. Its Q4_K_M download is 986 MB. The performer requests a 2,048-token context and three inference threads. This leaves CPU capacity for the audio path. The command prints wall time for each accepted line, including initial model loading on the first request. Compare those times with the ten-second reading interval before deciding how far ahead to compose. [Ollama model details](https://ollama.com/library/qwen2.5:1.5b)
 
 With Ollama installed and its local service running, these commands generate four new lines and their musical answers. Playback starts when you open the completed take. [Ollama Linux setup](https://docs.ollama.com/linux)
 

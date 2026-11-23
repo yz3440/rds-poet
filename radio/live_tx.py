@@ -13,7 +13,7 @@ import time
 from gnuradio import analog, blocks, filter, gr
 from gnuradio.filter import firdes
 
-from radio.live_rds import LiveRds, validate_title
+from radio.live_rds import DEFAULT_LINE_SECONDS, LiveRds, validate_title
 
 
 MPX_RATE = 228_000
@@ -124,7 +124,7 @@ def main():
     text_source.add_argument("--lyrics", type=Path, metavar="FILE",
                              help="rotate RadioText through a file, one line at a time")
     parser.add_argument("--line-seconds", type=float, metavar="SECONDS",
-                        help="time per line with --lyrics (default: 2)")
+                        help=f"time per line with --lyrics (default: {DEFAULT_LINE_SECONDS})")
     parser.add_argument("--audio-file", "--wav", metavar="FILE",
                         help="loop a local audio file supported by libsndfile (default: 440 Hz tone)")
     parser.add_argument("--mono", action="store_true",
@@ -141,7 +141,7 @@ def main():
             parser.error("--line-seconds requires --lyrics")
         if not math.isfinite(args.line_seconds) or args.line_seconds <= 0:
             parser.error("--line-seconds must be finite and positive")
-    interval = args.line_seconds if args.line_seconds is not None else 2.0
+    interval = args.line_seconds if args.line_seconds is not None else DEFAULT_LINE_SECONDS
     try:
         lines = load_lyrics(args.lyrics) if args.lyrics else []
     except (OSError, ValueError) as exc:

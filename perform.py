@@ -16,6 +16,7 @@ from urllib.error import HTTPError
 import numpy as np
 from gnuradio import audio, blocks, gr
 
+from radio.live_rds import DEFAULT_LINE_SECONDS
 from radio.live_tx import Transmitter, hackrf_sink
 from score import RATE, generate, render
 
@@ -171,7 +172,8 @@ def main():
     output = parser.add_mutually_exclusive_group()
     output.add_argument("--fm", type=float, metavar="MHZ", help="transmit music and RDS using HackRF")
     output.add_argument("--wav-out", type=Path, help="record mono audio in real time")
-    parser.add_argument("--line-seconds", type=float, default=2, help="duration of one Strudel cycle")
+    parser.add_argument("--line-seconds", type=float, default=DEFAULT_LINE_SECONDS,
+                        help="seconds per line and Strudel cycle (default: %(default)s)")
     parser.add_argument("--tx-gain-db", type=int, default=8)
     parser.add_argument("--bars", type=int, help="stop a speaker/WAV preview after N cycles")
     args = parser.parse_args()

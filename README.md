@@ -4,7 +4,7 @@ An FM receiver plays a short musical phrase while its RadioText display carries 
 
 ## Hear a performance
 
-For an eight-second test with a read-along player, a Strudel score and a model sized for the ThinkPad, start with [Featherweight](examples/featherweight/README.md).
+For a 40-second test with a read-along player, a Strudel score and a model sized for the ThinkPad, start with [Featherweight](examples/featherweight/README.md).
 
 On the Linux machine with GNU Radio, run these from the repository root. The built-in model learns word, rhythm and pitch sequences from the [original verse and note pairs](examples/air-poems.tsv) at startup. It runs in NumPy with a small vocabulary. This command plays through the system speakers.
 
@@ -15,10 +15,10 @@ On the Linux machine with GNU Radio, run these from the repository root. The bui
 To send the music and poem to the iPod using the tested gain setting, run
 
 ```sh
-/usr/bin/python3 perform.py --model pocket --fm 87.5 --tx-gain-db 40 --line-seconds 2
+/usr/bin/python3 perform.py --model pocket --fm 87.5 --tx-gain-db 40 --line-seconds 10
 ```
 
-Tune the iPod to 87.5 MHz. The terminal prints each new line and its playable Strudel source. Each cycle lasts two seconds by default. If a composition takes longer, the current music repeats and its text stays on screen. New phrases take effect on a cycle boundary. Receiver buffering can delay the display. Ctrl+C ends the performance.
+Tune the iPod to 87.5 MHz. The terminal prints each new line and its playable Strudel source. Each cycle lasts ten seconds by default. If a composition takes longer, the current music repeats and its text stays on screen. New phrases take effect on a cycle boundary. Receiver buffering can delay the display. Ctrl+C ends the performance.
 
 For a local audio recording and the matching score transcript, run
 

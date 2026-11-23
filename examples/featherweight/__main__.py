@@ -11,12 +11,12 @@ import wave
 
 import numpy as np
 
+from radio.live_rds import DEFAULT_LINE_SECONDS
 from score import PATTERN, RATE, generate, render
 
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_MODEL = "qwen2.5:1.5b"
-SECONDS = 2
 CYCLES = 4
 ARCHIVE_CUE = (
     'Published redsea RDS example, group 2A, MDR JUMP. '
@@ -37,7 +37,7 @@ def compose(model, cue):
         for attempt in range(3):
             try:
                 reply = generate(model, f"{THEME} This is line {index + 1} of {CYCLES}.", cue, history)
-                phrase = render(reply, SECONDS)
+                phrase = render(reply, DEFAULT_LINE_SECONDS)
                 if phrase.line in history:
                     raise ValueError("repeated line")
             except (ValueError, TypeError, KeyError) as exc:
@@ -54,14 +54,14 @@ def compose(model, cue):
 def save_take(out, phrases, cue, credit):
     rows = [{"line": phrase.line, "strudel": phrase.strudel} for phrase in phrases]
     expressions = ",\n  ".join(phrase.strudel for phrase in phrases)
-    program = f"setcps({1 / SECONDS})\nslowcat(\n  {expressions}\n)\n"
+    program = f"setcps({1 / DEFAULT_LINE_SECONDS})\nslowcat(\n  {expressions}\n)\n"
 
     # The web player builds the same patterns using the public Strudel API.
     notes = []
     for phrase in phrases:
         match = re.fullmatch(PATTERN, phrase.strudel)
         notes.append({"notes": match[1], "synth": match[2], "line": phrase.line})
-    payload = {"cue": cue, "credit": credit, "bars": notes, "seconds": SECONDS}
+    payload = {"cue": cue, "credit": credit, "bars": notes, "seconds": DEFAULT_LINE_SECONDS}
     html = (HERE / "player.html.in").read_text(encoding="utf-8")
     html = html.replace("__TAKE_JSON__", json.dumps(payload, ensure_ascii=True).replace("<", "\\u003c"))
 
@@ -87,7 +87,7 @@ def main():
     try:
         if args.reference:
             source = (HERE / "reference.jsonl").read_text(encoding="utf-8")
-            phrases = [render(json.loads(line), SECONDS) for line in source.splitlines()]
+            phrases = [render(json.loads(line), DEFAULT_LINE_SECONDS) for line in source.splitlines()]
             credit = "Reference take written by Codex"
         else:
             if args.sample_mhz is not None:
