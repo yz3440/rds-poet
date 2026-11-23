@@ -23,7 +23,7 @@ DEVIATION = 75_000
 
 
 class Transmitter(gr.top_block):
-    def __init__(self, sink, title, wav=None, *, mono=False):
+    def __init__(self, sink, title, wav=None, *, mono=False, audio_source=None):
         super().__init__("Live RadioText")
         self.rds = LiveRds(title)
         # Two chips per bit. The filter interpolates 2375 chips/s to 228 kS/s.
@@ -40,6 +40,10 @@ class Transmitter(gr.top_block):
             pilot = analog.sig_source_f(MPX_RATE, analog.GR_SIN_WAVE, 19000, 0.09)
             self.connect(pilot, (multiplex, 2))
 
+        # A live source supplies mono float samples at 48 kHz.
+        audio = audio_source
+        if wav and audio_source is not None:
+            raise ValueError("Choose a file or a live audio source")
         if wav:
             source = blocks.wavfile_source(str(wav), True)
             channels = source.channels()
@@ -60,6 +64,7 @@ class Transmitter(gr.top_block):
                 )
                 self.connect(audio, resampler)
                 audio = resampler
+        if audio is not None:
             self.connect(audio, analog.fm_preemph(48000, 75e-6),
                          analog.rail_ff(-1, 1),
                          filter.fir_filter_fff(1, firdes.low_pass(0.55, 48000, 14500, 1500)),

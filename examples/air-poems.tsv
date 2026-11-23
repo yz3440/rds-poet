@@ -1,0 +1,38 @@
+# register pulse | original line | synth | notes
+low steady|the floor keeps a little thunder|sine|d2 ~ d3 ~
+low steady|the cupboard holds its breath|sine|g2 ~ ~ d3
+low steady|a cup keeps the floor warm|triangle|c3 g2 ~ ~
+low steady|the door opens into wool|sine|a2 ~ e3 ~
+low steady|under the wool a motor turns|sine|f2 ~ c3 ~
+low steady|a little thunder sleeps upstairs|triangle|f3 ~ d2 ~
+low pulsing|the motor knocks inside a pear|triangle|d3 a2 d3 ~
+low pulsing|the floor knocks back twice|sine|e2 e2 ~ b2
+low pulsing|a cup rolls under the door|triangle|g2 ~ d3 g2
+low pulsing|under the spoon a second pulse|sine|a2 e3 a2 ~
+low pulsing|each step wakes the cupboard|triangle|c3 c3 g2 ~
+midrange steady|a spoon remembers the river|sine|c4 ~ g3 ~
+midrange steady|the room holds a glass of rain|sine|d4 a3 ~ ~
+midrange steady|a glass waits on the sill|triangle|f3 ~ c4 ~
+midrange steady|the river wears a borrowed coat|sine|g3 c4 ~ ~
+midrange steady|the sill keeps one wet ring|triangle|a3 ~ d4 ~
+midrange steady|the door opens into evening|sine|c4 ~ e4 ~
+midrange pulsing|a spoon turns in a glass|triangle|d4 f4 a3 ~
+midrange pulsing|the river counts the spoons|sine|c4 c4 ~ g3
+midrange pulsing|each knock leaves a wet ring|triangle|g3 ~ b3 d4
+midrange pulsing|the door forgets the last knock|triangle|e4 e4 ~ b3
+midrange pulsing|a coat brushes past the sill|sine|a3 d4 ~ a3
+bright steady|light collects on the spoon|sine|a4 ~ e5 ~
+bright steady|a silver thread crosses the room|sine|g5 ~ d5 ~
+bright steady|the glass keeps a slice of sky|triangle|c5 ~ g4 ~
+bright steady|the morning wears a thin ring|sine|e5 ~ b4 ~
+bright steady|the wire holds the last drop|triangle|d5 ~ a4 ~
+bright pulsing|rain ticks against the wire|triangle|c5 e5 ~ c5
+bright pulsing|each drop strikes a different key|triangle|d5 a4 f5 ~
+bright pulsing|the spoon flashes then falls|sine|g5 d5 ~ g4
+bright pulsing|a silver key taps the glass|triangle|a4 a4 e5 ~
+bright pulsing|the last drop skips a beat|sine|f5 ~ d5 a4
+quiet steady|the empty cup is still warm|sine|~ ~ c3 ~
+quiet steady|a door waits inside the wall|sine|~ a3 ~ ~
+quiet steady|the last knock stays behind|triangle|~ ~ d3 ~
+quiet steady|a spoon sleeps under the coat|sine|g3 ~ ~ ~
+quiet steady|one wet ring stays on the sill|triangle|~ c4 ~ ~
