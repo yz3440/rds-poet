@@ -1,0 +1,4 @@
+{"line": "A chair in the hallway, empty and worn,", "strudel": "note(\"e4 ~ g4 c4 g4 ~ e4\").s(\"sine\").clip(0.95).fast(1)", "cue": "105.7 MHz FM: midrange, steady, audio level -8 dBFS"}
+{"line": "Echo the pulse of the steady FM waves, a subtle beat in the air,", "strudel": "note(\"e4 f5 g5 ~ f5 e5 f4 e4\").s(\"sawtooth\").clip(0.7).fast(1)", "cue": "88.1 MHz FM: midrange, steady, audio level -12 dBFS"}
+{"line": "Whispers of the wind, so low", "strudel": "note(\"a2 ~ c4 c#4 c#5 ~ d4\").s(\"square\").clip(0.25).fast(3)", "cue": "105.7 MHz FM: midrange, steady, audio level -7 dBFS"}
+{"line": "The dust rose, a whisper from the floor, a hint of bare feet.", "strudel": "note(\"d3 ~ a3 c4\").s(\"triangle\").clip(0.35).fast(2)", "cue": "88.1 MHz FM: midrange, steady, audio level -13 dBFS"}

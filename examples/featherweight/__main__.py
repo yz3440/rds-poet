@@ -45,7 +45,8 @@ def compose(model, next_cue):
 
 
 def save_take(out, phrases, cues, credit):
-    rows = [{"line": phrase.line, "strudel": phrase.strudel} for phrase in phrases]
+    rows = [{"line": phrase.line, "strudel": phrase.strudel, "cue": cue}
+            for phrase, cue in zip(phrases, cues)]
     expressions = ",\n  ".join(phrase.strudel for phrase in phrases)
     program = f"setcps({1 / DEFAULT_LINE_SECONDS})\nslowcat(\n  {expressions}\n)\n"
 

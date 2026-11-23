@@ -39,4 +39,6 @@ For a continuing poem, run the performer directly. The single HackRF samples the
 /usr/bin/python3 perform.py --sample-mhz 105.7 88.1 --fm --tx-gain-db 40
 ```
 
+The [two-station take](station-take.jsonl) pairs each generated line with its measured FM cue and playable Strudel. To hear all four voices on speakers without a receiver or model, run `/usr/bin/python3 perform.py --score examples/featherweight/station-take.jsonl`.
+
 The [four-line Qwen take](qwen-take.jsonl) was generated on this ThinkPad from the archived MDR JUMP cue. Across three completed takes with the model already loaded on CPU, the median time for an accepted line and its notes was 4.0 seconds. The slowest took 9.6 seconds. The saved take took 15.6 seconds to compose and plays for 40 seconds. To hear this exact result on speakers, run `/usr/bin/python3 perform.py --score examples/featherweight/qwen-take.jsonl --bars 4` from the repository root.

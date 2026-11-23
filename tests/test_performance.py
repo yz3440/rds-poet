@@ -89,6 +89,15 @@ class PerformanceTest(unittest.TestCase):
         self.assertEqual(phrases[1].line, "Oars touch water")
         self.assertEqual(len(set(p.line for p in phrases)), 8)
 
+    def test_recurring_image_can_echo_once_inside_a_line(self):
+        lines = ["A loose dandelion", "Rails carry dandelions west",
+                 "Silt covers the dandelion", "Steam lifts the latch"]
+        replies = [{"line": line, "strudel": 'note("d3").s("sine")'} for line in lines]
+        composer = score.Composer("local")
+        with patch.object(score, "generate", side_effect=replies):
+            result = [composer.compose("air", "steady", 0.25).line for _ in range(3)]
+        self.assertEqual(result, [lines[0], lines[1], lines[3]])
+
     def test_gate_and_speed_change_audio_in_each_supported_voice(self):
         spectra = []
         for synth in score.VOICES:

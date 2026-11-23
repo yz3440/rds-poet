@@ -22,7 +22,8 @@ PATTERN = BARE_PATTERN + r'(?:\.clip\((0\.[1-9][0-9]?|1)\)\.fast\(([1-4])\))?'
 MODEL_PATTERN = BARE_PATTERN.replace('"', "'")
 INSTRUCTIONS = """Compose one line of an ongoing radio poem and its musical answer.
 Write a short concrete image (2 to 8 words), in printable ASCII. Listen to the
-provided cue. Move to a new subject or action. Vary your opening words.
+provided cue. Show a physical detail or action. Vary your opening words.
+Keep musical directions in the score.
 Echo the pulse or brightness without naming the station. Return line and strudel.
 Compose Strudel like note('d3 ~ a3 c4').s('triangle'). Each space divides the
 cycle into equal steps. Use 1-16 tokens: lowercase notes a-g in octaves 2-6,
@@ -134,6 +135,14 @@ def opening(line):
                  {"a", "an", "the", "in", "at", "on", "by", "of", "under", "only"}), "")
 
 
+def image_words(line):
+    common = {"about", "after", "again", "from", "into", "like", "only", "over", "that",
+              "their", "them", "then", "there", "this", "through", "under", "what", "when",
+              "where", "while", "with", "without", "your"}
+    return {word.removesuffix("s") for word in re.findall(r"[a-z]{4,}", line.lower())
+            if word not in common}
+
+
 class Composer:
     def __init__(self, model):
         self.model = model
@@ -163,8 +172,13 @@ class Composer:
                     raise ValueError("Missing poem line")
                 line = validate_title(reply["line"].strip())
                 subject = opening(line)
+                # Let a motif echo once. Catch it again even if it has moved
+                # to the middle of a line or changed from singular to plural.
+                recent_images = [image_words(old) for old in self.history[-5:]]
+                tired_image = any(sum(word in old for old in recent_images) >= 2
+                                  for word in image_words(line))
                 if (not subject or line.casefold() in (old.casefold() for old in self.history)
-                        or subject in (opening(old) for old in self.history[-8:])):
+                        or subject in (opening(old) for old in self.history[-8:]) or tired_image):
                     prompt = f"{theme} {direction} Move to a new place. Begin with an action."
                     raise ValueError("repeated line or opening image")
                 match = re.fullmatch(BARE_PATTERN, reply["strudel"])
