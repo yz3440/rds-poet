@@ -36,21 +36,28 @@ def describe(audio, mhz):
     return f"{label}: {tone}, {texture}, audio level {20 * math.log10(rms):.0f} dBFS"
 
 
-def capture_hackrf(mhz, recognizer=None):
-    seconds = SPEECH_SECONDS if recognizer else 2
-    count = seconds * IQ_RATE
-    recording = subprocess.run(
-        ["hackrf_transfer", "-r", "-", "-f", str(round(mhz * 1e6) - TUNE_OFFSET),
-         "-s", str(IQ_RATE), "-n", str(count), "-l", "32", "-g", "24"],
-        capture_output=True, timeout=seconds + 15,
-    )
+def receive_iq(center_hz, count):
+    """Return exactly count interleaved signed I/Q samples, closing the HackRF."""
+    try:
+        recording = subprocess.run(
+            ["hackrf_transfer", "-r", "-", "-f", str(center_hz),
+             "-s", str(IQ_RATE), "-n", str(count), "-l", "32", "-g", "24"],
+            capture_output=True, timeout=count / IQ_RATE + 15,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("Timed out receiving samples from HackRF") from exc
     if recording.returncode or len(recording.stdout) != count * 2:
         detail = recording.stderr.decode(errors="replace")[-500:].strip()
         if "resource busy" in detail.lower():
             raise RuntimeError("HackRF is busy. End the current HackRF session before sampling.")
         raise RuntimeError("Incomplete HackRF capture: " + detail)
+    return np.frombuffer(recording.stdout, np.int8)
+
+
+def capture_hackrf(mhz, recognizer=None):
+    seconds = SPEECH_SECONDS if recognizer else 2
+    raw = receive_iq(round(mhz * 1e6) - TUNE_OFFSET, seconds * IQ_RATE)
     # Decimate in one-second blocks to bound the size of floating-point I/Q.
-    raw = np.frombuffer(recording.stdout, np.int8)
     channel = np.concatenate([tune_channel(block.astype(np.float32).view(np.complex64))
                               for block in np.split(raw, seconds)])
     return describe_baseband(channel, mhz, recognizer)
