@@ -57,6 +57,26 @@ With a second device, an RTL-SDR tuned to the source station can keep supplying 
 /usr/bin/python3 perform.py --model qwen2.5:1.5b --rtl-mhz 99.5 --fm --tx-gain-db 40
 ```
 
+### Install whisper.cpp for offline transcription
+
+On the ThinkPad, Git, CMake and a C++ compiler are already installed. To set up another copy on Linux, build the CPU command-line tool and download the English `tiny.en` model. [whisper.cpp release](https://github.com/ggml-org/whisper.cpp/releases/tag/v1.9.5)
+
+```sh
+mkdir -p ~/Developer ~/.local/bin
+git clone --depth 1 --branch v1.9.5 https://github.com/ggml-org/whisper.cpp.git ~/Developer/whisper.cpp
+cd ~/Developer/whisper.cpp
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DWHISPER_BUILD_TESTS=OFF
+cmake --build build --target whisper-cli --parallel 3
+install -m 755 build/bin/whisper-cli ~/.local/bin/whisper-cli
+sh models/download-ggml-model.sh tiny.en
+```
+
+Transcribe the included speech sample with the command below. To use your own recording, replace the path after `-f` with a 16 kHz mono PCM WAV file. The live performer currently uses the acoustic cues described above.
+
+```sh
+~/.local/bin/whisper-cli -m ~/Developer/whisper.cpp/models/ggml-tiny.en.bin -f ~/Developer/whisper.cpp/samples/jfk.wav -t 3
+```
+
 ## Score and runtime
 
 Each phrase pairs up to 64 printable ASCII characters with playable Strudel, for example `note("d3 ~ a3 c4").s("triangle").clip(0.35).fast(2)`. The model writes the pitches and rests. The performer shuffles four voices across successive lines, giving sine notes room to ring, clipping square notes into taps, and varying the articulation and speed of the triangle and sawtooth figures. The speaker, WAV and FM paths synthesize the printed score in Python at 48 kHz. You can play the same expression in Strudel with the printed `setcps(...)` tempo. [Strudel synthesizers](https://strudel.cc/learn/synths/) · [Strudel timing controls](https://strudel.cc/learn/time-modifiers/)
