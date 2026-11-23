@@ -74,7 +74,7 @@ class rds_tx(gr.top_block, Qt.QWidget):
         self.pilot_gain = pilot_gain = 0.1
         self.outbuffer = outbuffer = 10
         self.input_gain = input_gain = 0.425
-        self.freq = freq = 87.5e6
+        self.freq = freq = 100.0e6
 
         ##################################################
         # Blocks

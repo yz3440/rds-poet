@@ -30,7 +30,7 @@ The closest precedent I found is Esteban Agosín’s *M(ol)AR, Hybrid Landscape*
 
 Anna Friz describes a practice in which radio supplies the material, the subject and the means of transmission. Douglas Kahn’s history of electromagnetic sound gives that idea a longer past, tracing how listeners heard environmental phenomena through telegraph and telephone infrastructure. Both perspectives sharpen a question the technology alone cannot answer. What difference does it make to the poem that a particular antenna heard something at a particular moment? If someone could unplug the receiving antenna and hear the same performance, the connection to place would be hard to perceive. [Friz’s artist statement at UC Santa Cruz](https://film.ucsc.edu/directory/afriz/) · [Kahn, *Earth Sound Earth Signal* (2013)](https://www.ucpress.edu/book/9780520257559/earth-sound-earth-signal)
 
-## What to try on 87.5
+## What to try on air
 
 Give the receiver a repeated sound to listen for. Let its brightness determine the register of the next Strudel phrase. Let the poem carry one object across several lines while that sound changes. A listener joining midway gets something to recognize. For example, a dry opening tick might accompany “one spoon in the drawer.” A brighter, doubled tick could bring “someone has set a second place.” If the input falls quiet, leave the second place set for another cycle. Those are proposed lines for this project.
 

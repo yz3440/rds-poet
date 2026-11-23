@@ -30,12 +30,13 @@ class PerformanceTest(unittest.TestCase):
 
     def test_fm_cli_converts_mhz_before_opening_device(self):
         score = Path(perform.__file__).parent / "examples" / "rehearsal.jsonl"
-        argv = ["perform.py", "--score", str(score), "--fm", "87.5", "--tx-gain-db", "40"]
-        with patch.object(sys, "argv", argv), patch.object(perform.signal, "signal"), \
-             patch.object(perform, "hackrf_sink", side_effect=RuntimeError("no device")) as sink, \
-             redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-            perform.main()
-        sink.assert_called_once_with(87_500_000, 40)
+        for fm, hz in [(["--fm"], 100_000_000), (["--fm", "87.5"], 87_500_000)]:
+            argv = ["perform.py", "--score", str(score), *fm, "--tx-gain-db", "40"]
+            with self.subTest(fm=fm), patch.object(sys, "argv", argv), patch.object(perform.signal, "signal"), \
+                 patch.object(perform, "hackrf_sink", side_effect=RuntimeError("no device")) as sink, \
+                 redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                perform.main()
+            sink.assert_called_once_with(hz, 40)
 
     def test_late_score_repeats_audio_and_changes_text_only_on_boundary(self):
         first = Phrase("glass", "", np.array([1, 2, 3, 4], np.float32))

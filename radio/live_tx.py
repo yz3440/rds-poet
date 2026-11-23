@@ -16,6 +16,7 @@ from gnuradio.filter import firdes
 from radio.live_rds import DEFAULT_LINE_SECONDS, LiveRds, validate_title
 
 
+DEFAULT_FM_MHZ = 100.0
 MPX_RATE = 228_000
 INTERPOLATION = 36
 IQ_RATE = MPX_RATE * INTERPOLATION
@@ -118,7 +119,8 @@ def load_lyrics(path):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--freq-mhz", type=float, default=87.5)
+    parser.add_argument("--freq-mhz", type=float, default=DEFAULT_FM_MHZ,
+                        help="transmit frequency in MHz (default: %(default)s)")
     text_source = parser.add_mutually_exclusive_group()
     text_source.add_argument("--title", type=validate_title, default="RDS Poet")
     text_source.add_argument("--lyrics", type=Path, metavar="FILE",

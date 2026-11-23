@@ -15,10 +15,12 @@ On the Linux machine with GNU Radio, run these from the repository root. The bui
 To send the music and poem to the iPod using the tested gain setting, run
 
 ```sh
-/usr/bin/python3 perform.py --model pocket --fm 87.5 --tx-gain-db 40 --line-seconds 10
+/usr/bin/python3 perform.py --model pocket --fm --tx-gain-db 40 --line-seconds 10
 ```
 
-Tune the iPod to 87.5 MHz. The terminal prints each new line and its playable Strudel source. Each cycle lasts ten seconds by default. If a composition takes longer, the current music repeats and its text stays on screen. New phrases take effect on a cycle boundary. Receiver buffering can delay the display. Ctrl+C ends the performance.
+Tune the iPod to 100.0 MHz. On a fifth-generation nano, if the dial skips from 99.9 to 100.1, choose Radio → Radio Regions → Europe for 0.1 MHz steps. Use `--fm 87.5` or another frequency to override the transmit default. [Apple’s tuning table, page 66](https://cdsassets.apple.com/live/6GJYWVAV/user/ma1194_ipod_nano_5th_gen_userguide.pdf#page=66)
+
+The terminal prints each new line and its playable Strudel source. Each cycle lasts ten seconds by default. If a composition takes longer, the current music repeats and its text stays on screen. New phrases take effect on a cycle boundary. Receiver buffering can delay the display. Ctrl+C ends the performance.
 
 For a local audio recording and the matching score transcript, run
 
@@ -32,7 +34,7 @@ The default backend calls Ollama at `127.0.0.1:11434` with a schema for the line
 
 ```sh
 ollama pull qwen2.5:1.5b
-/usr/bin/python3 perform.py --model qwen2.5:1.5b --theme "what the water heard" --fm 87.5 --tx-gain-db 40
+/usr/bin/python3 perform.py --model qwen2.5:1.5b --theme "what the water heard" --fm --tx-gain-db 40
 ```
 
 ## Let the air suggest the next line
@@ -40,13 +42,13 @@ ollama pull qwen2.5:1.5b
 HackRF One is half-duplex. With one device, `--sample-mhz` listens for two seconds, closes the receiver, then opens the transmitter. Every line can draw on that first impression and the history of the poem. Replace 99.5 with a public FM station you can hear where you are. [HackRF One specifications](https://hackrf.readthedocs.io/en/latest/hackrf_one.html)
 
 ```sh
-/usr/bin/python3 perform.py --model pocket --sample-mhz 99.5 --fm 87.5 --tx-gain-db 40
+/usr/bin/python3 perform.py --model pocket --sample-mhz 99.5 --fm --tx-gain-db 40
 ```
 
 With a second device, an RTL-SDR tuned to the source station can keep supplying new observations while the HackRF transmits. Each model request gets the latest one-second audio window. This mode needs the `rtl_fm` utility. Both modes describe acoustic features such as brightness, level and pulse. They use these measurements as prompts. Speech transcription would be a separate input.
 
 ```sh
-/usr/bin/python3 perform.py --model qwen2.5:1.5b --rtl-mhz 99.5 --fm 87.5 --tx-gain-db 40
+/usr/bin/python3 perform.py --model qwen2.5:1.5b --rtl-mhz 99.5 --fm --tx-gain-db 40
 ```
 
 ## Score and runtime

@@ -8,7 +8,7 @@ from pydub import AudioSegment
 import subprocess
 
 # Constants
-FREQUENCY = 106.9e6  # 106.9 MHz
+FREQUENCY = 100.0e6  # Hz
 SAMPLE_RATE = 2e6  # 2 MHz sample rate
 AUDIO_SAMPLE_RATE = 44100  # Standard audio sample rate
 MP3_PATH = "assets/never-gonna-give-you-up.mp3"

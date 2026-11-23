@@ -1,12 +1,13 @@
 # RDS Poet
 
-## HackRF live title test at 87.5 MHz
+## HackRF live title test at 100.0 MHz
 
 On the machine with the HackRF One attached, run the following from the repository
-root. Use a receiver that can tune 87.5 MHz and show RDS RadioText.
+root. Tune a receiver with RDS RadioText to the default 100.0 MHz. Pass
+`--freq-mhz MHZ` to select another transmit frequency.
 
 ```sh
-/usr/bin/python3 -m radio.live_tx --freq-mhz 87.5 --title "First song"
+/usr/bin/python3 -m radio.live_tx --title "First song"
 ```
 
 Listen for the 440 Hz test tone and look for the station name `RDS POET`.
@@ -29,7 +30,7 @@ the same position. The startup line reports the configured gain.
 Loop the bundled song with ten seconds per RadioText line.
 
 ```sh
-/usr/bin/python3 -m radio.live_tx --freq-mhz 87.5 --tx-gain-db 40 --mono \
+/usr/bin/python3 -m radio.live_tx --tx-gain-db 40 --mono \
   --audio-file assets/never-gonna-give-you-up.mp3 \
   --lyrics assets/rotation-demo.txt --line-seconds 10
 ```
@@ -45,7 +46,7 @@ an alias for `--audio-file`.
 To loop the three original sample lines at ten seconds per line, run
 
 ```sh
-/usr/bin/python3 -m radio.live_tx --freq-mhz 87.5 --tx-gain-db 14 --lyrics assets/rotation-demo.txt --line-seconds 10
+/usr/bin/python3 -m radio.live_tx --tx-gain-db 14 --lyrics assets/rotation-demo.txt --line-seconds 10
 ```
 
 Pass your own text file to `--lyrics`, one line per display update, up to
@@ -59,7 +60,8 @@ loop audio alongside the text. For manual entry, omit both rotation options.
 On the fifth-generation nano, plug wired headphones into the headphone jack,
 open Radio and check a familiar FM station first. The headphone cord is the
 FM antenna and radio audio plays through the headphones. Then manually tune
-87.5 MHz. [Apple's fifth-generation nano guide, chapter 6](https://cdsassets.apple.com/live/6GJYWVAV/user/ma1194_ipod_nano_5th_gen_userguide.pdf)
+100.0 MHz. If the dial skips 100.0, choose Radio → Radio Regions → Europe
+for 0.1 MHz tuning steps. [Apple's fifth-generation nano guide, chapter 6](https://cdsassets.apple.com/live/6GJYWVAV/user/ma1194_ipod_nano_5th_gen_userguide.pdf)
 
 Stop the WAV run with Ctrl+C and use the command above without `--wav` to
 send a continuous 440 Hz tone. Listen for the tone and check for `RDS POET`.

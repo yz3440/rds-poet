@@ -17,7 +17,7 @@ import numpy as np
 from gnuradio import audio, blocks, gr
 
 from radio.live_rds import DEFAULT_LINE_SECONDS
-from radio.live_tx import Transmitter, hackrf_sink
+from radio.live_tx import DEFAULT_FM_MHZ, Transmitter, hackrf_sink
 from score import RATE, generate, render
 
 
@@ -170,7 +170,8 @@ def main():
     source.add_argument("--rtl-mhz", type=float, help="refresh FM cues continuously using an RTL-SDR")
     parser.add_argument("--score", type=Path, help="rehearse a JSONL score instead of running the model")
     output = parser.add_mutually_exclusive_group()
-    output.add_argument("--fm", type=float, metavar="MHZ", help="transmit music and RDS using HackRF")
+    output.add_argument("--fm", nargs="?", const=DEFAULT_FM_MHZ, type=float, metavar="MHZ",
+                        help="transmit music and RDS using HackRF (default with --fm: %(const)s MHz)")
     output.add_argument("--wav-out", type=Path, help="record mono audio in real time")
     parser.add_argument("--line-seconds", type=float, default=DEFAULT_LINE_SECONDS,
                         help="seconds per line and Strudel cycle (default: %(default)s)")
