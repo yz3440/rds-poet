@@ -4,6 +4,8 @@ An FM receiver plays a short musical phrase while its RadioText display carries 
 
 ## Hear a performance
 
+For an eight-second test with a read-along player, a Strudel score and a model sized for the ThinkPad, start with [Featherweight](examples/featherweight/README.md).
+
 On the Linux machine with GNU Radio, run these from the repository root. The built-in model learns word, rhythm and pitch sequences from the [original verse and note pairs](examples/air-poems.tsv) at startup. It runs in NumPy with a small vocabulary. This command plays through the system speakers.
 
 ```sh

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Featherweight · RDS Poet</title>
+<style>
+  :root { color-scheme: dark; font-family: "DM Sans", sans-serif; background: #192222; color: #f7eed8; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; }
+  main { width: min(84vw, 42rem); padding: 3rem 0; }
+  h1 { font: 500 clamp(2.2rem, 7vw, 4rem) Georgia, serif; margin: 0; }
+  #line { display: grid; align-items: center; min-height: 3.4em; margin: 1rem 0; font: italic 400 clamp(1.7rem, 5vw, 2.9rem)/1.16 Georgia, serif; }
+  nav { display: flex; gap: .6rem; flex-wrap: wrap; }
+  button { background: #edc987; color: #172323; border: 0; padding: .6rem 1rem; border-radius: .25rem; font: inherit; cursor: pointer; }
+  button:disabled { opacity: .45; cursor: default; }
+  footer, #status { color: #c3cec2; font-size: .9rem; line-height: 1.55; }
+  footer { margin-top: 2rem; border-top: 1px solid #54625a; padding-top: 1rem; }
+  a { color: #edc987; }
+</style>
+<main>
+  <h1>Featherweight</h1>
+  <p id="line" aria-live="polite"></p>
+  <nav aria-label="Playback">
+    <button id="strudel" disabled>Play Strudel</button>
+    <button id="wav">Play WAV preview</button>
+    <button id="stop" disabled>Stop</button>
+  </nav>
+  <p id="status" role="status"></p>
+  <footer><span id="cue"></span><br><span id="credit"></span> · <a href="featherweight.strudel">Strudel score</a></footer>
+</main>
+<script id="take" type="application/json">__TAKE_JSON__</script>
+<script>
+  const take = JSON.parse(document.getElementById("take").textContent);
+  const el = id => document.getElementById(id);
+  const preview = new Audio("preview.wav");
+  const duration = take.bars.length * take.seconds;
+  let clock, frame, endTimer, session = 0, usingStrudel = false;
+  el("cue").textContent = take.cue;
+  el("credit").textContent = take.credit;
+  el("line").textContent = take.bars[0].line;
+
+  function stop() {
+    session++;
+    cancelAnimationFrame(frame);
+    clearTimeout(endTimer);
+    preview.pause();
+    if (usingStrudel) window.hush();
+    usingStrudel = false;
+    el("stop").disabled = true;
+  }
+
+  function show() {
+    const seconds = clock();
+    const index = Math.min(take.bars.length - 1, Math.floor(seconds / take.seconds));
+    const line = take.bars[index].line;
+    if (el("line").textContent !== line) el("line").textContent = line;
+    if (seconds >= duration || (!usingStrudel && preview.ended)) stop();
+    else frame = requestAnimationFrame(show);
+  }
+
+  async function play(useStrudel) {
+    stop();
+    const token = session;
+    el("stop").disabled = false;
+    el("status").textContent = "";
+    try {
+      if (useStrudel) {
+        const context = window.getAudioContext();
+        await context.resume();
+        if (token !== session) return;
+        const music = take.bars.map(bar => window.note(bar.notes).s(bar.synth));
+        usingStrudel = true;
+        await window.slowcat(...music).cpm(60 / take.seconds).play();
+        if (token !== session) return;
+        const start = context.currentTime;
+        clock = () => Math.max(0, context.currentTime - start);
+        endTimer = setTimeout(stop, duration * 1000);
+      } else {
+        preview.currentTime = 0;
+        await preview.play();
+        if (token !== session) return;
+        clock = () => preview.currentTime;
+      }
+      show();
+    } catch (error) {
+      if (token !== session) return;
+      stop();
+      el("status").textContent = error.message;
+    }
+  }
+  el("wav").onclick = () => play(false);
+  el("strudel").onclick = () => play(true);
+  el("stop").onclick = stop;
+  window.addEventListener("pagehide", stop);
+
+  async function prepareStrudel() {
+    try {
+      await window.initStrudel();
+      for (let i = 0; i < 120 && !(window.note && window.slowcat && window.getAudioContext && window.hush); i++) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      if (!(window.note && window.slowcat && window.getAudioContext && window.hush)) throw Error();
+      el("strudel").disabled = false;
+    } catch {
+      el("status").textContent = "Strudel could not load. The WAV preview works offline.";
+    }
+  }
+</script>
+<script async src="https://unpkg.com/@strudel/web@1.0.3"
+        onload="prepareStrudel()" onerror="el('status').textContent='Strudel could not load. The WAV preview works offline.'"></script>
+</html>
