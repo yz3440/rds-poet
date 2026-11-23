@@ -100,3 +100,21 @@ The tested gr-rds encoder rebuilds its groups after a command, allocates new
 group buffers without freeing the old ones, and keeps the group 2A RadioText
 A/B flag fixed. The software parser can recover subsequent titles. Receiver
 behavior and long-running operation still need validation.
+
+## Precedents for reading over FM
+
+- **Midnight Bill (2011).** Joey Orr and Chris Campbell collaborated on a
+  WREK Atlanta broadcast that paired a 15-minute audio piece with timed
+  text on radio displays. The script identified speakers and dates and
+  supplied extra narrative details while people listened.
+  [Artist's exhibition record](https://joeyorr.com/cv/) ·
+  [Interview with Campbell about the broadcast](https://www.radioworld.com/news-and-business/wrek-beefs-up-rds-hd-text-display-for-special-program)
+- **Lyrics over RadioText (filed 1993).** A South Korean utility model
+  described sending the words of a song in the RDS RadioText field for
+  display during musical accompaniment. The filing documents a proposed
+  design. [KR960001675Y1](https://patents.google.com/patent/KR960001675Y1/en)
+- **NPR Labs Gulf Coast field tests (2014).** Deaf and hard-of-hearing
+  participants read emergency messages sent over FM RDS to a dedicated
+  receiver and displayed on a tablet. Researchers compared blocks of prose
+  with versions that inserted line breaks at changes of subject.
+  [Field report, sections on message design and results](https://www.nrscstandards.org/standards-and-guidelines/documents/references/Accessible_Common_Alerting_Protocol_Radio_Data_System_Demonstration_-_Gulf_Coast_States.pdf)
