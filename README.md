@@ -19,7 +19,10 @@ are mixed to mono. This entry point takes up to 64 printable ASCII
 characters per title and toggles the RadioText A/B flag when the transmitted
 title changes. It needs GNU Radio 3.10, NumPy, gr-osmosdr with HackRF support
 and the `hackrf_info` utility. It uses an 8.208 MS/s IQ stream, with the RF
-amplifier off and 8 dB TX VGA gain.
+amplifier off and a default TX VGA gain of 8 dB. For a close-range reception
+comparison, add `--tx-gain-db 14` and keep the iPod and headphone cord in
+the same position. The startup line reports the configured gain.
+[HackRF TX gain controls](https://hackrf.readthedocs.io/en/latest/setting_gain.html)
 
 ### If the iPod nano is silent
 

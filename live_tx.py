@@ -70,7 +70,7 @@ class Transmitter(gr.top_block):
                      filter.rational_resampler_ccc(interpolation=INTERPOLATION, decimation=1), sink)
 
 
-def hackrf_sink(freq_hz):
+def hackrf_sink(freq_hz, tx_gain_db=8):
     # Some gr-osmosdr builds crash if libusb cannot initialize.
     check = subprocess.run(["hackrf_info"], capture_output=True, text=True)
     if check.returncode:
@@ -86,7 +86,9 @@ def hackrf_sink(freq_hz):
     if abs(sink.get_sample_rate() - IQ_RATE) > 1 or abs(sink.get_center_freq(0) - freq_hz) > 1:
         raise RuntimeError("HackRF did not accept the requested sample rate and frequency")
     sink.set_gain(0, "RF", 0)
-    sink.set_gain(8, "IF", 0)
+    applied_gain = sink.set_gain(tx_gain_db, "IF", 0)
+    if applied_gain != tx_gain_db:
+        raise RuntimeError(f"HackRF reported {applied_gain:g} dB for the requested {tx_gain_db} dB TX gain")
     sink.set_bandwidth(1.75e6, 0)
     return sink
 
@@ -96,11 +98,15 @@ def main():
     parser.add_argument("--freq-mhz", type=float, default=87.5)
     parser.add_argument("--title", type=validate_title, default="RDS Poet")
     parser.add_argument("--wav", help="loop a mono or stereo WAV (default: 440 Hz tone)")
+    parser.add_argument("--tx-gain-db", type=int, default=8, metavar="DB",
+                        help="HackRF TX VGA gain, 0 to 47 dB (default: 8)")
     args = parser.parse_args()
+    if not 0 <= args.tx_gain_db <= 47:
+        parser.error("--tx-gain-db must be an integer from 0 to 47")
     if not math.isfinite(args.freq_mhz) or not 1 <= args.freq_mhz <= 6000:
         parser.error("Use a HackRF frequency between 1 and 6000 MHz")
     try:
-        graph = Transmitter(hackrf_sink(args.freq_mhz * 1e6), args.title, args.wav)
+        graph = Transmitter(hackrf_sink(args.freq_mhz * 1e6, args.tx_gain_db), args.title, args.wav)
         graph.start()
     except (RuntimeError, ValueError, OSError) as exc:
         parser.exit(1, f"Could not start transmitter: {exc}\n")
@@ -110,7 +116,7 @@ def main():
 
     signal.signal(signal.SIGTERM, stop)
     try:
-        print(f"Running at {args.freq_mhz:g} MHz. Type a title and press Enter. Ctrl+C stops.", flush=True)
+        print(f"Running at {args.freq_mhz:g} MHz with {args.tx_gain_db} dB TX gain. Type a title and press Enter. Ctrl+C stops.", flush=True)
         for line in sys.stdin:
             title = line.rstrip("\r\n")
             try:
